@@ -1,0 +1,611 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Fake OpenAI Server</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+      min-height: 100vh;
+      color: #e0e0e0;
+    }
+
+    .container {
+      max-width: 1000px;
+      margin: 0 auto;
+      padding: 20px;
+    }
+
+    header {
+      text-align: center;
+      padding: 20px 0 30px;
+    }
+
+    h1 {
+      font-size: 2rem;
+      background: linear-gradient(90deg, #00d4ff, #00ff88);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      margin-bottom: 10px;
+    }
+
+    .status {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 16px;
+      border-radius: 20px;
+      font-size: 0.9rem;
+    }
+
+    .status.connected {
+      background: rgba(0, 255, 136, 0.1);
+      color: #00ff88;
+    }
+
+    .status.disconnected {
+      background: rgba(255, 107, 107, 0.1);
+      color: #ff6b6b;
+    }
+
+    .status-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      animation: pulse 2s infinite;
+    }
+
+    .connected .status-dot {
+      background: #00ff88;
+    }
+
+    .disconnected .status-dot {
+      background: #ff6b6b;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+
+    .stats {
+      display: flex;
+      justify-content: center;
+      gap: 20px;
+      margin-top: 15px;
+      font-size: 0.85rem;
+      color: #888;
+    }
+
+    .stat-item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .stat-value {
+      color: #00d4ff;
+      font-weight: 600;
+    }
+
+    .request-list {
+      display: flex;
+      flex-direction: column;
+      gap: 15px;
+    }
+
+    .request-card {
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 12px;
+      overflow: hidden;
+      animation: slideIn 0.3s ease-out;
+    }
+
+    @keyframes slideIn {
+      from {
+        opacity: 0;
+        transform: translateY(-10px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    .request-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 12px 16px;
+      background: rgba(0, 0, 0, 0.2);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .request-info {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .request-model {
+      background: linear-gradient(90deg, #00d4ff, #00ff88);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      font-weight: 600;
+    }
+
+    .request-type {
+      padding: 4px 10px;
+      border-radius: 12px;
+      font-size: 0.75rem;
+      font-weight: 500;
+    }
+
+    .request-type.stream {
+      background: rgba(255, 193, 7, 0.2);
+      color: #ffc107;
+    }
+
+    .request-type.normal {
+      background: rgba(0, 212, 255, 0.2);
+      color: #00d4ff;
+    }
+
+    .request-id {
+      font-family: monospace;
+      font-size: 0.75rem;
+      color: #666;
+    }
+
+    .request-body {
+      padding: 16px;
+    }
+
+    .messages {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      max-height: 200px;
+      overflow-y: auto;
+    }
+
+    .message {
+      display: flex;
+      gap: 10px;
+      padding: 10px 12px;
+      background: rgba(0, 0, 0, 0.2);
+      border-radius: 8px;
+    }
+
+    .message-role {
+      font-weight: 600;
+      min-width: 60px;
+    }
+
+    .message-role.system { color: #ffc107; }
+    .message-role.user { color: #00d4ff; }
+    .message-role.assistant { color: #00ff88; }
+
+    .message-content {
+      flex: 1;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    .response-section {
+      margin-top: 15px;
+      padding-top: 15px;
+      border-top: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .response-label {
+      font-size: 0.85rem;
+      color: #888;
+      margin-bottom: 10px;
+    }
+
+    .response-input {
+      width: 100%;
+      min-height: 100px;
+      padding: 12px;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      border-radius: 8px;
+      background: rgba(0, 0, 0, 0.3);
+      color: #e0e0e0;
+      font-size: 0.95rem;
+      resize: vertical;
+      font-family: inherit;
+    }
+
+    .response-input:focus {
+      outline: none;
+      border-color: #00d4ff;
+    }
+
+    .button-group {
+      display: flex;
+      gap: 10px;
+      margin-top: 12px;
+    }
+
+    .btn {
+      padding: 10px 20px;
+      border: none;
+      border-radius: 8px;
+      font-size: 0.9rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .btn-primary {
+      background: linear-gradient(90deg, #00d4ff, #00ff88);
+      color: #1a1a2e;
+    }
+
+    .btn-primary:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 15px rgba(0, 212, 255, 0.3);
+    }
+
+    .btn-secondary {
+      background: rgba(255, 255, 255, 0.1);
+      color: #e0e0e0;
+    }
+
+    .btn-secondary:hover {
+      background: rgba(255, 255, 255, 0.15);
+    }
+
+    .btn-stream {
+      background: rgba(255, 193, 7, 0.2);
+      color: #ffc107;
+      border: 1px solid rgba(255, 193, 7, 0.3);
+    }
+
+    .btn-stream:hover {
+      background: rgba(255, 193, 7, 0.3);
+    }
+
+    .empty-state {
+      text-align: center;
+      padding: 60px 20px;
+      color: #666;
+    }
+
+    .empty-state-icon {
+      font-size: 4rem;
+      margin-bottom: 20px;
+    }
+
+    .empty-state-text {
+      font-size: 1.1rem;
+    }
+
+    .stream-controls {
+      display: none;
+      gap: 10px;
+      margin-top: 12px;
+    }
+
+    .stream-controls.active {
+      display: flex;
+    }
+
+    .stream-input-group {
+      flex: 1;
+      display: flex;
+      gap: 10px;
+    }
+
+    .stream-input {
+      flex: 1;
+      padding: 10px 15px;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      border-radius: 8px;
+      background: rgba(0, 0, 0, 0.3);
+      color: #e0e0e0;
+      font-size: 0.95rem;
+    }
+
+    .stream-input:focus {
+      outline: none;
+      border-color: #ffc107;
+    }
+
+    .toast {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      padding: 12px 20px;
+      background: rgba(0, 255, 136, 0.2);
+      border: 1px solid rgba(0, 255, 136, 0.3);
+      border-radius: 8px;
+      color: #00ff88;
+      opacity: 0;
+      transform: translateY(20px);
+      transition: all 0.3s;
+    }
+
+    .toast.show {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>Fake OpenAI Server</h1>
+      <div id="status" class="status disconnected">
+        <span class="status-dot"></span>
+        <span id="statusText">未连接</span>
+      </div>
+      <div class="stats">
+        <div class="stat-item">
+          <span>待处理:</span>
+          <span id="pendingCount" class="stat-value">0</span>
+        </div>
+        <div class="stat-item">
+          <span>已处理:</span>
+          <span id="processedCount" class="stat-value">0</span>
+        </div>
+      </div>
+    </header>
+
+    <main>
+      <div id="requestList" class="request-list">
+        <div class="empty-state">
+          <div class="empty-state-icon">📭</div>
+          <div class="empty-state-text">等待请求中...</div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <div id="toast" class="toast"></div>
+
+  <script>
+    const state = {
+      requests: new Map(),
+      processedCount: 0,
+      ws: null,
+      connected: false
+    };
+
+    // DOM 元素
+    const elements = {
+      status: document.getElementById('status'),
+      statusText: document.getElementById('statusText'),
+      requestList: document.getElementById('requestList'),
+      pendingCount: document.getElementById('pendingCount'),
+      processedCount: document.getElementById('processedCount'),
+      toast: document.getElementById('toast')
+    };
+
+    // 连接 WebSocket
+    function connect() {
+      const wsProtocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const wsUrl = `${wsProtocol}//${location.host}`;
+      
+      state.ws = new WebSocket(wsUrl);
+
+      state.ws.onopen = () => {
+        state.connected = true;
+        updateStatus(true);
+        showToast('已连接到服务器');
+      };
+
+      state.ws.onclose = () => {
+        state.connected = false;
+        updateStatus(false);
+        showToast('连接已断开，正在重连...');
+        setTimeout(connect, 3000);
+      };
+
+      state.ws.onerror = (err) => {
+        console.error('WebSocket error:', err);
+      };
+
+      state.ws.onmessage = (event) => {
+        try {
+          const msg = JSON.parse(event.data);
+          handleMessage(msg);
+        } catch (e) {
+          console.error('Parse error:', e);
+        }
+      };
+    }
+
+    // 更新连接状态
+    function updateStatus(connected) {
+      elements.status.className = `status ${connected ? 'connected' : 'disconnected'}`;
+      elements.statusText.textContent = connected ? '已连接' : '未连接';
+    }
+
+    // 处理消息
+    function handleMessage(msg) {
+      switch (msg.type) {
+        case 'connected':
+          console.log('Server:', msg.payload.message);
+          break;
+        case 'request':
+          addRequest(msg.payload.requestId, msg.payload.data);
+          break;
+      }
+    }
+
+    // 添加请求
+    function addRequest(requestId, data) {
+      state.requests.set(requestId, {
+        id: requestId,
+        data,
+        response: '',
+        streaming: false
+      });
+      renderRequests();
+      showToast('收到新请求');
+    }
+
+    // 渲染请求列表
+    function renderRequests() {
+      elements.pendingCount.textContent = state.requests.size;
+      elements.processedCount.textContent = state.processedCount;
+
+      if (state.requests.size === 0) {
+        elements.requestList.innerHTML = `
+          <div class="empty-state">
+            <div class="empty-state-icon">📭</div>
+            <div class="empty-state-text">等待请求中...</div>
+          </div>
+        `;
+        return;
+      }
+
+      let html = '';
+      state.requests.forEach((req, requestId) => {
+        const isStream = req.data.stream === true;
+        const messages = req.data.messages || [];
+        
+        html += `
+          <div class="request-card" data-id="${requestId}">
+            <div class="request-header">
+              <div class="request-info">
+                <span class="request-model">${req.data.model}</span>
+                <span class="request-type ${isStream ? 'stream' : 'normal'}">${isStream ? '流式' : '非流式'}</span>
+              </div>
+              <span class="request-id">${requestId.substring(0, 16)}...</span>
+            </div>
+            <div class="request-body">
+              <div class="messages">
+                ${messages.map(m => `
+                  <div class="message">
+                    <span class="message-role ${m.role}">${m.role}</span>
+                    <span class="message-content">${escapeHtml(m.content)}</span>
+                  </div>
+                `).join('')}
+              </div>
+              <div class="response-section">
+                <div class="response-label">${isStream ? '流式响应（输入后点击发送块）' : '输入响应内容'}</div>
+                ${isStream ? `
+                  <div class="stream-controls active">
+                    <div class="stream-input-group">
+                      <input type="text" class="stream-input" placeholder="输入要发送的内容块..." id="stream-${requestId}">
+                      <button class="btn btn-stream" onclick="sendStreamChunk('${requestId}')">发送块</button>
+                    </div>
+                    <button class="btn btn-secondary" onclick="endStream('${requestId}')">结束流</button>
+                  </div>
+                ` : `
+                  <textarea class="response-input" placeholder="输入要返回给客户端的内容..." id="response-${requestId}"></textarea>
+                  <div class="button-group">
+                    <button class="btn btn-primary" onclick="sendResponse('${requestId}')">发送响应</button>
+                  </div>
+                `}
+              </div>
+            </div>
+          </div>
+        `;
+      });
+
+      elements.requestList.innerHTML = html;
+    }
+
+    // 发送非流式响应
+    function sendResponse(requestId) {
+      const textarea = document.getElementById(`response-${requestId}`);
+      const content = textarea.value.trim();
+      
+      if (!content) {
+        showToast('请输入响应内容');
+        return;
+      }
+
+      state.ws.send(JSON.stringify({
+        type: 'response',
+        payload: { requestId, content }
+      }));
+
+      state.requests.delete(requestId);
+      state.processedCount++;
+      renderRequests();
+      showToast('响应已发送');
+    }
+
+    // 发送流式块
+    function sendStreamChunk(requestId) {
+      const input = document.getElementById(`stream-${requestId}`);
+      const content = input.value.trim();
+      
+      if (!content) {
+        showToast('请输入内容');
+        return;
+      }
+
+      state.ws.send(JSON.stringify({
+        type: 'stream',
+        payload: { requestId, content }
+      }));
+
+      input.value = '';
+      showToast('块已发送');
+    }
+
+    // 结束流
+    function endStream(requestId) {
+      state.ws.send(JSON.stringify({
+        type: 'stream_end',
+        payload: { requestId, content: '' }
+      }));
+
+      state.requests.delete(requestId);
+      state.processedCount++;
+      renderRequests();
+      showToast('流已结束');
+    }
+
+    // 显示提示
+    function showToast(message) {
+      elements.toast.textContent = message;
+      elements.toast.classList.add('show');
+      setTimeout(() => {
+        elements.toast.classList.remove('show');
+      }, 2000);
+    }
+
+    // HTML 转义
+    function escapeHtml(text) {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
+    // 键盘快捷键
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && e.ctrlKey) {
+        // Ctrl+Enter 发送响应
+        const activeTextarea = document.activeElement;
+        if (activeTextarea.classList.contains('response-input')) {
+          const card = activeTextarea.closest('.request-card');
+          if (card) {
+            sendResponse(card.dataset.id);
+          }
+        }
+      }
+    });
+
+    // 启动
+    connect();
+  </script>
+</body>
+</html>
