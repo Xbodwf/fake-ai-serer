@@ -3,6 +3,9 @@ FROM node:24-alpine AS frontend-builder
 
 WORKDIR /app/frontend
 
+# 配置国内镜像源
+RUN yarn config set registry https://registry.npmmirror.com
+
 # 复制前端依赖文件
 COPY frontend/package.json frontend/yarn.lock* ./
 
@@ -19,6 +22,9 @@ RUN yarn build
 FROM node:24-alpine AS backend-builder
 
 WORKDIR /app
+
+# 配置国内镜像源
+RUN yarn config set registry https://registry.npmmirror.com
 
 # 复制后端依赖文件
 COPY package.json yarn.lock* ./
@@ -37,6 +43,9 @@ RUN yarn build
 FROM node:24-alpine
 
 WORKDIR /app
+
+# 配置国内镜像源
+RUN yarn config set registry https://registry.npmmirror.com
 
 # 启用 corepack
 RUN corepack enable
