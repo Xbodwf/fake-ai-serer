@@ -7,13 +7,9 @@ services:
       dockerfile: Dockerfile
     container_name: fake-ai-server
     restart: unless-stopped
-    ports:
-      - "3000:3000"
+    network_mode: host
     volumes:
       - ./data:/app/data
     environment:
       - NODE_ENV=production
       - PORT=3000
-    # 开放所有端口（使用 host 网络模式）
-    # 如果只需要特定端口，可以注释掉 network_mode 并使用 ports
-    # network_mode: host
