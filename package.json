@@ -1,7 +1,7 @@
 {
-  "name": "fake-openai-server",
+  "name": "phantom-mock",
   "version": "1.0.0",
-  "description": "Fake OpenAI API Server with frontend input",
+  "description": "Phantom Mock - OpenAI API Mock Server with frontend input",
   "type": "module",
   "main": "dist/index.js",
   "scripts": {
@@ -13,7 +13,7 @@
     "start": "node dist/index.js",
     "lint": "eslint src/frontend"
   },
-  "keywords": ["openai", "fake", "proxy"],
+  "keywords": ["openai", "mock", "phantom", "proxy"],
   "author": "",
   "license": "ISC",
   "dependencies": {

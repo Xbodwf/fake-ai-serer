@@ -1,4 +1,4 @@
-# Fake AI Server
+# Phantom Mock
 
 一个模拟 OpenAI API 的服务器，带有前端界面用于输入响应内容。
 
@@ -16,14 +16,14 @@
 
 ```bash
 # 克隆仓库
-git clone https://github.com/Xbodwf/fake-ai-server.git
-cd fake-ai-server
+git clone https://github.com/Xbodwf/phantom-mock.git
+cd phantom-mock
 
 # 启动服务
 docker-compose up -d
 
 # 查看日志
-docker-compose logs -f
+docker-compose logs -f phantom-mock
 ```
 
 服务将在 `http://localhost:7143` 启动。
@@ -32,24 +32,24 @@ docker-compose logs -f
 ```bash
 # 运行容器
 docker run -d \
-  --name fake-ai-server \
+  --name phantom-mock \
   -p 7143:7143 \
   -v $(pwd)/data:/app/data \
-  xbodwf/fake-ai-server:v1.1
+  xbodwf/phantom-mock:latest
 ```
 
 ### 方式三：Docker 手动构建
 
 ```bash
 # 构建镜像
-docker build --no-cache -t fake-ai-server .
+docker build --no-cache -t phantom-mock .
 
 # 运行容器
 docker run -d \
-  --name fake-ai-server \
+  --name phantom-mock \
   -p 7143:7143 \
   -v $(pwd)/data:/app/data \
-  fake-ai-server
+  phantom-mock
 ```
 
 ### 方式四：本地开发

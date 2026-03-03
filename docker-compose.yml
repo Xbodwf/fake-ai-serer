@@ -1,11 +1,11 @@
 version: '3.8'
 
 services:
-  fake-ai-server:
+  phantom-mock:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: fake-ai-server
+    container_name: phantom-mock
     restart: unless-stopped
     volumes:
       - ./data:/app/data
