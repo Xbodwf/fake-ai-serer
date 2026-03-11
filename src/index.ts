@@ -4,6 +4,8 @@ import { addPendingRequest, getPendingRequest, removePendingRequest, getPendingC
 import { buildResponse, buildStreamChunk, buildStreamDone, generateRequestId } from './responseBuilder.js';
 import { broadcastRequest, initWebSocket, getConnectedClientsCount, broadcastModelsUpdate } from './websocket.js';
 import { createServer } from 'http';
+import { existsSync } from 'fs';
+import { join } from 'path';
 import {
   loadModels,
   getAllModels,
@@ -20,7 +22,21 @@ import {
   updateApiKey,
   deleteApiKey,
   validateApiKey,
+  loadUsers,
+  loadUsageRecords,
+  loadInvoices,
+  loadActions,
+  createUsageRecord,
+  getUserById,
+  updateUser,
 } from './storage.js';
+import { calculateCost, estimateTokens } from './billing.js';
+import authRoutes from './routes/auth.js';
+import userRoutes from './routes/user.js';
+import adminRoutes from './routes/admin.js';
+import actionsRoutes from './routes/actions.js';
+import openaiRoutes from './routes/openai.js';
+import { authMiddleware, adminMiddleware, errorHandler } from './middleware.js';
 
 // 辅助函数：获取消息内容的字符串表示
 function getContentString(content: Message['content']): string {
@@ -50,6 +66,26 @@ app.use((req, res, next) => {
   }
   next();
 });
+
+// ==================== 初始化数据 ====================
+(async () => {
+  await loadUsers();
+  await loadUsageRecords();
+  await loadInvoices();
+  await loadActions();
+})();
+
+// ==================== 认证路由 ====================
+app.use('/api/auth', authRoutes);
+
+// ==================== 用户路由 ====================
+app.use('/api/user', authMiddleware, userRoutes);
+
+// ==================== Actions 路由 ====================
+app.use('/api', actionsRoutes);
+
+// ==================== 管理员路由 ====================
+app.use('/api/admin', authMiddleware, adminMiddleware, adminRoutes);
 
 // ==================== API Key 认证中间件 ====================
 
@@ -340,71 +376,8 @@ app.get('/api/server-config', async (req: Request, res: Response) => {
 // 所有 /v1/* 路由应用 API Key 认证中间件
 app.use('/v1', apiKeyAuthMiddleware);
 
-// GET /v1/models - 获取模型列表
-app.get('/v1/models', (req: Request, res: Response) => {
-  res.json({
-    object: 'list',
-    data: getAllModels(),
-  });
-});
-
-// GET /v1/models/:id - 获取单个模型
-app.get('/v1/models/:id', (req: Request, res: Response) => {
-  const model = getModel(req.params.id as string);
-  if (!model) {
-    return res.status(404).json({
-      error: { message: 'Model not found', type: 'invalid_request_error' }
-    });
-  }
-  res.json(model);
-});
-
-// POST /v1/chat/completions - 聊天补全
-app.post('/v1/chat/completions', async (req: Request, res: Response) => {
-  const body = req.body as ChatCompletionRequest;
-
-  if (!body.model || !body.messages || !Array.isArray(body.messages)) {
-    return res.status(400).json({
-      error: {
-        message: 'Invalid request: model and messages are required',
-        type: 'invalid_request_error',
-      }
-    });
-  }
-
-  // 验证模型是否存在
-  const modelExists = getModel(body.model);
-  if (!modelExists) {
-    console.log('[Server] 模型不存在:', body.model);
-    return res.status(400).json({
-      error: {
-        message: `Model '${body.model}' not found. Available models: ${getAllModels().map(m => m.id).join(', ')}`,
-        type: 'invalid_request_error',
-        code: 'model_not_found',
-      }
-    });
-  }
-
-  const requestId = generateRequestId();
-  const isStream = body.stream === true;
-
-  console.log('\n========================================');
-  console.log('收到新的 ChatCompletion 请求 [OpenAI]');
-  console.log('请求ID:', requestId);
-  console.log('模型:', body.model);
-  console.log('流式:', isStream);
-  console.log('消息数:', body.messages.length);
-  console.log('当前前端连接数:', getConnectedClientsCount());
-  console.log('----------------------------------------');
-
-  body.messages.forEach((msg, i) => {
-    const content = getContentString(msg.content);
-    console.log(`  [${i + 1}] ${msg.role}: ${content.substring(0, 100)}${content.length > 100 ? '...' : ''}`);
-  });
-  console.log('========================================\n');
-
-  await handleChatRequest(body, requestId, isStream, res);
-});
+// 使用 OpenAI 路由
+app.use('/v1', openaiRoutes);
 
 // POST /v1/responses - OpenAI Responses API
 app.post('/v1/responses', async (req: Request, res: Response) => {
@@ -580,45 +553,6 @@ app.post('/v1/responses', async (req: Request, res: Response) => {
   }
 });
 
-// POST /v1/completions - 文本补全（旧版）
-app.post('/v1/completions', (req: Request, res: Response) => {
-  res.status(400).json({
-    error: {
-      message: 'This endpoint is deprecated. Please use /v1/chat/completions',
-      type: 'invalid_request_error',
-    }
-  });
-});
-
-// POST /v1/embeddings - 向量嵌入
-app.post('/v1/embeddings', (req: Request, res: Response) => {
-  res.json({
-    object: 'list',
-    data: [{
-      object: 'embedding',
-      embedding: new Array(1536).fill(0),
-      index: 0,
-    }],
-    model: req.body.model || 'text-embedding-ada-002',
-    usage: {
-      prompt_tokens: 0,
-      total_tokens: 0,
-    }
-  });
-});
-
-// POST /v1/moderations - 内容审核
-app.post('/v1/moderations', (req: Request, res: Response) => {
-  res.json({
-    id: `modr-${generateRequestId()}`,
-    model: 'text-moderation-latest',
-    results: [{
-      flagged: false,
-      categories: {},
-      category_scores: {},
-    }]
-  });
-});
 
 // ==================== 图片生成 API ====================
 
@@ -1108,109 +1042,6 @@ app.get('/v1beta/models/:modelId', (req: Request, res: Response) => {
   });
 });
 
-// ==================== 辅助函数 ====================
-
-async function handleChatRequest(
-  body: ChatCompletionRequest,
-  requestId: string,
-  isStream: boolean,
-  res: Response
-) {
-  // 提取请求参数
-  const requestParams = {
-    temperature: body.temperature,
-    top_p: body.top_p,
-    max_tokens: body.max_tokens,
-    presence_penalty: body.presence_penalty,
-    frequency_penalty: body.frequency_penalty,
-    stop: body.stop,
-    n: body.n,
-    user: body.user,
-  };
-
-  if (isStream) {
-    res.setHeader('Content-Type', 'text/event-stream');
-    res.setHeader('Cache-Control', 'no-cache');
-    res.setHeader('Connection', 'keep-alive');
-    res.setHeader('X-Accel-Buffering', 'no');
-
-    let streamEnded = false;
-
-    const pending: PendingRequest = {
-      requestId,
-      request: body,
-      isStream: true,
-      createdAt: Date.now(),
-      resolve: () => {},
-      streamController: {
-        enqueue: (content: string) => {
-          if (!streamEnded) {
-            res.write(buildStreamChunk(requestId, body.model, content, false));
-          }
-        },
-        close: () => {
-          if (!streamEnded) {
-            streamEnded = true;
-            res.write(buildStreamChunk(requestId, body.model, '', false, true));
-            res.write(buildStreamDone());
-            res.end();
-          }
-        }
-      },
-      requestParams,
-    };
-
-    addPendingRequest(pending);
-    broadcastRequest(pending);
-
-    const timeout = setTimeout(() => {
-      if (!streamEnded) {
-        streamEnded = true;
-        removePendingRequest(requestId);
-        res.write(buildStreamDone());
-        res.end();
-      }
-    }, 10 * 60 * 1000);
-
-    res.on('close', () => {
-      clearTimeout(timeout);
-      removePendingRequest(requestId);
-    });
-  } else {
-    const pending: PendingRequest = {
-      requestId,
-      request: body,
-      isStream: false,
-      createdAt: Date.now(),
-      resolve: () => {},
-      requestParams,
-    };
-
-    const responsePromise = new Promise<string>((resolve) => {
-      pending.resolve = resolve;
-    });
-
-    addPendingRequest(pending);
-    broadcastRequest(pending);
-
-    const timeout = setTimeout(() => {
-      removePendingRequest(requestId);
-      res.json(buildResponse('请求超时，请重试', body.model, requestId));
-    }, 10 * 60 * 1000);
-
-    try {
-      const content = await responsePromise;
-      clearTimeout(timeout);
-      res.json(buildResponse(content, body.model, requestId));
-    } catch {
-      clearTimeout(timeout);
-      res.status(500).json({
-        error: { message: 'Internal server error', type: 'server_error' }
-      });
-    }
-  }
-}
-
 async function handleGeminiRequest(
   req: Request,
   res: Response,
@@ -1423,7 +1254,11 @@ function buildGeminiResponse(content: string, model: string) {
 }
 
 // 静态文件服务（前端构建产物）
-app.use(express.static('dist/frontend'));
+// 仅在生产模式下提供静态文件
+const distPath = join(process.cwd(), 'dist/frontend');
+if (existsSync(distPath)) {
+  app.use(express.static(distPath));
+}
 
 // SPA fallback - 使用中间件处理所有未匹配的路由
 app.use((req: Request, res: Response) => {
@@ -1431,11 +1266,46 @@ app.use((req: Request, res: Response) => {
   if (req.path.startsWith('/api/') || req.path.startsWith('/v1/') || req.path.startsWith('/v1beta/')) {
     return res.status(404).json({ error: 'Not found' });
   }
-  // 否则返回前端页面
-  res.sendFile('dist/frontend/index.html', { root: '.' });
+  // 否则返回前端页面（如果存在）
+  const indexPath = join(distPath, 'index.html');
+  if (existsSync(indexPath)) {
+    res.sendFile(indexPath);
+  } else {
+    // 开发模式下，返回提示信息
+    res.status(200).send(`
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Phantom Mock - Development Mode</title>
+          <style>
+            body { font-family: Arial, sans-serif; margin: 40px; }
+            h1 { color: #333; }
+            p { color: #666; line-height: 1.6; }
+            code { background: #f4f4f4; padding: 2px 6px; border-radius: 3px; }
+          </style>
+        </head>
+        <body>
+          <h1>Phantom Mock - Development Mode</h1>
+          <p>Frontend is running in development mode.</p>
+          <p>To access the frontend, please run:</p>
+          <code>pnpm dev:frontend</code>
+          <p>This will start the Vite development server on port 5173.</p>
+          <p>The backend API is available at:</p>
+          <ul>
+            <li>Chat Completions: POST /v1/chat/completions</li>
+            <li>Models: GET /v1/models</li>
+            <li>Auth: POST /api/auth/login</li>
+          </ul>
+        </body>
+      </html>
+    `);
+  }
 });
 
 // 启动服务
+// ==================== 错误处理中间件 ====================
+app.use(errorHandler);
+
 async function start() {
   // 加载配置和模型
   await loadModels();

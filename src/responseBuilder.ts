@@ -1,8 +1,16 @@
 import { v4 as uuidv4 } from 'uuid';
 import type { ChatCompletionRequest, ChatCompletionResponse, ChatCompletionChunk, ModelsResponse } from './types.js';
 
+// 估算 token 数
+function estimateTokens(text: string): number {
+  return Math.ceil(text.length / 4);
+}
+
 // 构建非流式响应
-export function buildResponse(content: string, model: string, requestId?: string): ChatCompletionResponse {
+export function buildResponse(content: string, model: string, requestId?: string, promptContent?: string): ChatCompletionResponse {
+  const promptTokens = promptContent ? estimateTokens(promptContent) : 0;
+  const completionTokens = estimateTokens(content);
+
   return {
     id: requestId || `chatcmpl-${uuidv4().replace(/-/g, '')}`,
     object: 'chat.completion',
@@ -19,9 +27,9 @@ export function buildResponse(content: string, model: string, requestId?: string
       },
     ],
     usage: {
-      prompt_tokens: 0,
-      completion_tokens: 0,
-      total_tokens: 0,
+      prompt_tokens: promptTokens,
+      completion_tokens: completionTokens,
+      total_tokens: promptTokens + completionTokens,
     },
   };
 }

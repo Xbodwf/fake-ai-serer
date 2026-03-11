@@ -1,12 +1,16 @@
 import { readFile, writeFile, access, mkdir } from 'fs/promises';
 import { join } from 'path';
-import type { Model, ApiKey } from './types.js';
+import type { Model, ApiKey, User, UsageRecord, Invoice, Action } from './types.js';
 import { randomBytes } from 'crypto';
 
 const DATA_DIR = join(process.cwd(), 'data');
 const CONFIG_FILE = join(DATA_DIR, 'config.json');
 const MODELS_FILE = join(DATA_DIR, 'models.json');
 const API_KEYS_FILE = join(DATA_DIR, 'api_keys.json');
+const USERS_FILE = join(DATA_DIR, 'users.json');
+const USAGE_RECORDS_FILE = join(DATA_DIR, 'usage_records.json');
+const INVOICES_FILE = join(DATA_DIR, 'invoices.json');
+const ACTIONS_FILE = join(DATA_DIR, 'actions.json');
 
 export interface ServerConfig {
   port: number;
@@ -67,6 +71,10 @@ const defaultConfig: Config = {
 let config: Config | null = null;
 let models: Model[] = [];
 let apiKeys: ApiKey[] = [];
+let users: User[] = [];
+let usageRecords: UsageRecord[] = [];
+let invoices: Invoice[] = [];
+let actions: Action[] = [];
 
 // 确保目录存在
 async function ensureDir() {
@@ -323,4 +331,269 @@ export async function updateServerConfig(serverConfig: Partial<ServerConfig>): P
   config.server = { ...config.server, ...serverConfig };
   await saveConfig(config);
   return config.server;
+}
+
+// ==================== 用户管理 ====================
+
+export async function loadUsers(): Promise<User[]> {
+  if (users.length > 0) return users;
+
+  try {
+    await ensureDir();
+    await ensureFile(USERS_FILE, []);
+    const content = await readFile(USERS_FILE, 'utf-8');
+    users = JSON.parse(content);
+
+    // 如果没有用户，创建默认管理员
+    if (users.length === 0) {
+      const { hashPassword } = await import('./auth.js');
+      const adminUser: User = {
+        id: 'admin_default',
+        username: 'admin',
+        email: 'admin@localhost',
+        passwordHash: await hashPassword('admin123'),
+        balance: 10000,
+        totalUsage: 0,
+        createdAt: Date.now(),
+        enabled: true,
+        role: 'admin',
+      };
+      users.push(adminUser);
+      await saveUsers();
+      console.log('[Storage] 创建默认管理员用户: admin / admin123');
+    }
+
+    return users;
+  } catch (e) {
+    console.warn('[Storage] 加载用户失败:', e);
+    users = [];
+    return users;
+  }
+}
+
+async function saveUsers(): Promise<void> {
+  await writeFile(USERS_FILE, JSON.stringify(users, null, 2));
+}
+
+export function getAllUsers(): User[] {
+  return users;
+}
+
+export function getUserById(id: string): User | undefined {
+  return users.find(u => u.id === id);
+}
+
+export function getUserByUsername(username: string): User | undefined {
+  return users.find(u => u.username === username);
+}
+
+export function getUserByEmail(email: string): User | undefined {
+  return users.find(u => u.email === email);
+}
+
+export async function createUser(user: Omit<User, 'id' | 'createdAt'>): Promise<User> {
+  const newUser: User = {
+    ...user,
+    id: `user_${Date.now()}`,
+    createdAt: Date.now(),
+  };
+  users.push(newUser);
+  await saveUsers();
+  return newUser;
+}
+
+export async function updateUser(id: string, updates: Partial<User>): Promise<User | null> {
+  const index = users.findIndex(u => u.id === id);
+  if (index === -1) return null;
+
+  users[index] = { ...users[index], ...updates };
+  await saveUsers();
+  return users[index];
+}
+
+export async function deleteUser(id: string): Promise<boolean> {
+  const index = users.findIndex(u => u.id === id);
+  if (index === -1) return false;
+
+  users.splice(index, 1);
+  await saveUsers();
+  return true;
+}
+
+// ==================== 使用记录管理 ====================
+
+export async function loadUsageRecords(): Promise<UsageRecord[]> {
+  if (usageRecords.length > 0) return usageRecords;
+
+  try {
+    await ensureDir();
+    await ensureFile(USAGE_RECORDS_FILE, []);
+    const content = await readFile(USAGE_RECORDS_FILE, 'utf-8');
+    usageRecords = JSON.parse(content);
+    return usageRecords;
+  } catch (e) {
+    console.warn('[Storage] 加载使用记录失败:', e);
+    usageRecords = [];
+    return usageRecords;
+  }
+}
+
+async function saveUsageRecords(): Promise<void> {
+  await writeFile(USAGE_RECORDS_FILE, JSON.stringify(usageRecords, null, 2));
+}
+
+export async function createUsageRecord(record: Omit<UsageRecord, 'id'>): Promise<UsageRecord> {
+  const newRecord: UsageRecord = {
+    ...record,
+    id: `usage_${Date.now()}`,
+  };
+  usageRecords.push(newRecord);
+  await saveUsageRecords();
+
+  // 更新用户的总使用量和余额
+  const user = getUserById(record.userId);
+  if (user) {
+    await updateUser(record.userId, {
+      totalUsage: (user.totalUsage || 0) + record.totalTokens,
+      balance: user.balance - record.cost,
+    });
+  }
+
+  return newRecord;
+}
+
+export function getUserUsageRecords(userId: string): UsageRecord[] {
+  return usageRecords.filter(r => r.userId === userId);
+}
+
+export function getUsageRecordsByDateRange(userId: string, startTime: number, endTime: number): UsageRecord[] {
+  return usageRecords.filter(r => r.userId === userId && r.timestamp >= startTime && r.timestamp <= endTime);
+}
+
+// ==================== 账单管理 ====================
+
+export async function loadInvoices(): Promise<Invoice[]> {
+  if (invoices.length > 0) return invoices;
+
+  try {
+    await ensureDir();
+    await ensureFile(INVOICES_FILE, []);
+    const content = await readFile(INVOICES_FILE, 'utf-8');
+    invoices = JSON.parse(content);
+    return invoices;
+  } catch (e) {
+    console.warn('[Storage] 加载账单失败:', e);
+    invoices = [];
+    return invoices;
+  }
+}
+
+async function saveInvoices(): Promise<void> {
+  await writeFile(INVOICES_FILE, JSON.stringify(invoices, null, 2));
+}
+
+export async function createInvoice(invoice: Omit<Invoice, 'id'>): Promise<Invoice> {
+  const newInvoice: Invoice = {
+    ...invoice,
+    id: `invoice_${Date.now()}`,
+  };
+  invoices.push(newInvoice);
+  await saveInvoices();
+  return newInvoice;
+}
+
+export function getUserInvoices(userId: string): Invoice[] {
+  return invoices.filter(i => i.userId === userId);
+}
+
+export async function updateInvoice(id: string, updates: Partial<Invoice>): Promise<Invoice | null> {
+  const index = invoices.findIndex(i => i.id === id);
+  if (index === -1) return null;
+
+  invoices[index] = { ...invoices[index], ...updates };
+  await saveInvoices();
+  return invoices[index];
+}
+
+// ==================== Actions 管理 ====================
+
+export async function loadActions(): Promise<Action[]> {
+  if (actions.length > 0) return actions;
+
+  try {
+    await ensureDir();
+    await ensureFile(ACTIONS_FILE, []);
+    const content = await readFile(ACTIONS_FILE, 'utf-8');
+    actions = JSON.parse(content);
+    return actions;
+  } catch (e) {
+    console.warn('[Storage] 加载 Actions 失败:', e);
+    actions = [];
+    return actions;
+  }
+}
+
+async function saveActions(): Promise<void> {
+  await writeFile(ACTIONS_FILE, JSON.stringify(actions, null, 2));
+}
+
+export function getAllActions(): Action[] {
+  return actions;
+}
+
+export function getActionById(id: string): Action | undefined {
+  return actions.find(a => a.id === id);
+}
+
+export function getActionsByCreator(userId: string): Action[] {
+  return actions.filter(a => a.createdBy === userId);
+}
+
+export function getPublicActions(): Action[] {
+  return actions.filter(a => a.isPublic);
+}
+
+export async function createAction(action: Omit<Action, 'id' | 'createdAt' | 'updatedAt' | 'version'>): Promise<Action> {
+  const newAction: Action = {
+    ...action,
+    id: `action_${Date.now()}`,
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+    version: 1,
+  };
+  actions.push(newAction);
+  await saveActions();
+  return newAction;
+}
+
+export async function updateAction(id: string, updates: Partial<Action>): Promise<Action | null> {
+  const index = actions.findIndex(a => a.id === id);
+  if (index === -1) return null;
+
+  actions[index] = {
+    ...actions[index],
+    ...updates,
+    updatedAt: Date.now(),
+    version: (actions[index].version || 0) + 1,
+  };
+  await saveActions();
+  return actions[index];
+}
+
+export async function deleteAction(id: string): Promise<boolean> {
+  const index = actions.findIndex(a => a.id === id);
+  if (index === -1) return false;
+
+  actions.splice(index, 1);
+  await saveActions();
+  return true;
+}
+
+export async function incrementActionUsage(id: string): Promise<void> {
+  const action = getActionById(id);
+  if (action) {
+    await updateAction(id, {
+      usageCount: (action.usageCount || 0) + 1,
+    });
+  }
 }

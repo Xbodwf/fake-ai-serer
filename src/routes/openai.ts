@@ -1,0 +1,320 @@
+import { Router, Request, Response } from 'express';
+import type { ChatCompletionRequest, PendingRequest } from '../types.js';
+import { addPendingRequest, removePendingRequest } from '../requestStore.js';
+import { buildResponse, buildStreamChunk, buildStreamDone, generateRequestId } from '../responseBuilder.js';
+import { broadcastRequest, getConnectedClientsCount } from '../websocket.js';
+import { getAllModels, getModel, validateApiKey, getUserById, updateUser, createUsageRecord } from '../storage.js';
+import { calculateCost, estimateTokens } from '../billing.js';
+
+const router: Router = Router();
+
+// 辅助函数：获取消息内容的字符串表示
+function getContentString(content: any): string {
+  if (typeof content === 'string') return content;
+  if (Array.isArray(content)) {
+    return content
+      .filter(c => c.type === 'text' && c.text)
+      .map(c => c.text)
+      .join('\n');
+  }
+  return '';
+}
+
+// 从请求中提取 API Key
+function extractApiKey(req: Request): string | null {
+  const authHeader = req.headers.authorization;
+  if (authHeader?.startsWith('Bearer ')) {
+    return authHeader.substring(7);
+  }
+  const xApiKey = req.headers['x-api-key'];
+  if (typeof xApiKey === 'string') {
+    return xApiKey;
+  }
+  return null;
+}
+
+/**
+ * GET /v1/models - 获取模型列表
+ */
+router.get('/models', (req: Request, res: Response) => {
+  res.json({
+    object: 'list',
+    data: getAllModels(),
+  });
+});
+
+/**
+ * GET /v1/models/:id - 获取单个模型
+ */
+router.get('/models/:id', (req: Request, res: Response) => {
+  const model = getModel(req.params.id as string);
+  if (!model) {
+    return res.status(404).json({
+      error: { message: 'Model not found', type: 'invalid_request_error' }
+    });
+  }
+  res.json(model);
+});
+
+/**
+ * POST /v1/chat/completions - 聊天补全
+ */
+router.post('/chat/completions', async (req: Request, res: Response) => {
+  const body = req.body as ChatCompletionRequest;
+
+  if (!body.model || !body.messages || !Array.isArray(body.messages)) {
+    return res.status(400).json({
+      error: {
+        message: 'Invalid request: model and messages are required',
+        type: 'invalid_request_error',
+      }
+    });
+  }
+
+  const modelExists = getModel(body.model);
+  if (!modelExists) {
+    return res.status(400).json({
+      error: {
+        message: `Model '${body.model}' not found. Available models: ${getAllModels().map(m => m.id).join(', ')}`,
+        type: 'invalid_request_error',
+        code: 'model_not_found',
+      }
+    });
+  }
+
+  // 计费检查
+  const apiKeyStr = extractApiKey(req);
+  let apiKeyObj: any = null;
+  if (apiKeyStr) {
+    apiKeyObj = await validateApiKey(apiKeyStr);
+  }
+
+  if (apiKeyObj && apiKeyObj.userId) {
+    const user = getUserById(apiKeyObj.userId);
+    if (user) {
+      const promptTokens = estimateTokens(
+        body.messages.map(m => getContentString(m.content)).join('\n')
+      );
+      const estimatedCost = calculateCost(promptTokens, 0, modelExists);
+
+      if (user.balance < estimatedCost) {
+        return res.status(402).json({
+          error: {
+            message: `Insufficient balance. Required: $${estimatedCost.toFixed(4)}, Available: $${user.balance.toFixed(4)}`,
+            type: 'insufficient_balance',
+            code: 'insufficient_balance',
+          }
+        });
+      }
+    }
+  }
+
+  const requestId = generateRequestId();
+  const isStream = body.stream === true;
+
+  console.log('\n========================================');
+  console.log('收到新的 ChatCompletion 请求 [OpenAI]');
+  console.log('请求ID:', requestId);
+  console.log('模型:', body.model);
+  console.log('流式:', isStream);
+  console.log('消息数:', body.messages.length);
+  console.log('当前前端连接数:', getConnectedClientsCount());
+  console.log('----------------------------------------');
+
+  body.messages.forEach((msg, i) => {
+    const content = getContentString(msg.content);
+    console.log(`  [${i + 1}] ${msg.role}: ${content.substring(0, 100)}${content.length > 100 ? '...' : ''}`);
+  });
+  console.log('========================================\n');
+
+  await handleChatRequest(body, requestId, isStream, res, apiKeyObj);
+});
+
+/**
+ * POST /v1/completions - 文本补全（旧版）
+ */
+router.post('/completions', (req: Request, res: Response) => {
+  res.status(400).json({
+    error: {
+      message: 'This endpoint is deprecated. Please use /v1/chat/completions',
+      type: 'invalid_request_error',
+    }
+  });
+});
+
+/**
+ * POST /v1/embeddings - 向量嵌入
+ */
+router.post('/embeddings', (req: Request, res: Response) => {
+  res.json({
+    object: 'list',
+    data: [{
+      object: 'embedding',
+      embedding: new Array(1536).fill(0),
+      index: 0,
+    }],
+    model: req.body.model || 'text-embedding-ada-002',
+    usage: {
+      prompt_tokens: 0,
+      total_tokens: 0,
+    }
+  });
+});
+
+/**
+ * POST /v1/moderations - 内容审核
+ */
+router.post('/moderations', (req: Request, res: Response) => {
+  res.json({
+    id: `modr-${generateRequestId()}`,
+    model: 'text-moderation-latest',
+    results: [{
+      flagged: false,
+      categories: {},
+      category_scores: {},
+    }]
+  });
+});
+
+async function handleChatRequest(
+  body: ChatCompletionRequest,
+  requestId: string,
+  isStream: boolean,
+  res: Response,
+  apiKeyObj?: any
+) {
+  const requestParams = {
+    temperature: body.temperature,
+    top_p: body.top_p,
+    max_tokens: body.max_tokens,
+    presence_penalty: body.presence_penalty,
+    frequency_penalty: body.frequency_penalty,
+    stop: body.stop,
+    n: body.n,
+    user: body.user,
+  };
+
+  const userId = apiKeyObj?.userId;
+  const apiKeyId = apiKeyObj?.id;
+
+  if (isStream) {
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.setHeader('X-Accel-Buffering', 'no');
+
+    let streamEnded = false;
+
+    const pending: PendingRequest = {
+      requestId,
+      request: body,
+      isStream: true,
+      createdAt: Date.now(),
+      resolve: () => {},
+      streamController: {
+        enqueue: (content: string) => {
+          if (!streamEnded) {
+            res.write(buildStreamChunk(requestId, body.model, content, false));
+          }
+        },
+        close: () => {
+          if (!streamEnded) {
+            streamEnded = true;
+            res.write(buildStreamChunk(requestId, body.model, '', false, true));
+            res.write(buildStreamDone());
+            res.end();
+          }
+        }
+      },
+      requestParams,
+    };
+
+    addPendingRequest(pending);
+    broadcastRequest(pending);
+
+    const timeout = setTimeout(() => {
+      if (!streamEnded) {
+        streamEnded = true;
+        removePendingRequest(requestId);
+        res.write(buildStreamDone());
+        res.end();
+      }
+    }, 10 * 60 * 1000);
+
+    res.on('close', () => {
+      clearTimeout(timeout);
+      removePendingRequest(requestId);
+    });
+  } else {
+    const pending: PendingRequest = {
+      requestId,
+      request: body,
+      isStream: false,
+      createdAt: Date.now(),
+      resolve: () => {},
+      requestParams,
+    };
+
+    const responsePromise = new Promise<string>((resolve) => {
+      pending.resolve = resolve;
+    });
+
+    addPendingRequest(pending);
+    broadcastRequest(pending);
+
+    const timeout = setTimeout(() => {
+      removePendingRequest(requestId);
+      const promptContent = body.messages.map(m => getContentString(m.content)).join('\n');
+      res.json(buildResponse('请求超时，请重试', body.model, requestId, promptContent));
+    }, 10 * 60 * 1000);
+
+    try {
+      const content = await responsePromise;
+      clearTimeout(timeout);
+      const promptContent = body.messages.map(m => getContentString(m.content)).join('\n');
+      const response = buildResponse(content, body.model, requestId, promptContent);
+
+      // 记录使用情况
+      if (userId && apiKeyId) {
+        const model = getModel(body.model);
+        if (model) {
+          const cost = calculateCost(
+            response.usage.prompt_tokens,
+            response.usage.completion_tokens,
+            model
+          );
+
+          await createUsageRecord({
+            userId,
+            apiKeyId,
+            model: body.model,
+            endpoint: 'chat',
+            promptTokens: response.usage.prompt_tokens,
+            completionTokens: response.usage.completion_tokens,
+            totalTokens: response.usage.total_tokens,
+            cost,
+            timestamp: Date.now(),
+            requestId,
+          });
+
+          const user = getUserById(userId);
+          if (user) {
+            await updateUser(userId, {
+              balance: user.balance - cost,
+              totalUsage: user.totalUsage + response.usage.total_tokens,
+            });
+          }
+        }
+      }
+
+      res.json(response);
+    } catch {
+      clearTimeout(timeout);
+      res.status(500).json({
+        error: { message: 'Internal server error', type: 'server_error' }
+      });
+    }
+  }
+}
+
+export default router;
