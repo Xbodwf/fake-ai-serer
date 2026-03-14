@@ -17,6 +17,7 @@ import {
   Typography,
   Divider,
   Snackbar,
+  InputAdornment,
 } from '@mui/material';
 import { Search, X } from 'lucide-react';
 import { ModelCard } from '../components/ModelCard';
@@ -33,6 +34,7 @@ export function ModelMarketplace({ models, onSelectModel }: ModelMarketplaceProp
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [selectedProvider, setSelectedProvider] = useState<string>('all');
+  const [selectedFeature, setSelectedFeature] = useState<string>('all');
   const [priceRange, setPriceRange] = useState<[number, number]>([0, 1]);
   const [selectedModel, setSelectedModel] = useState<Model | null>(null);
   const [showDetails, setShowDetails] = useState(false);
@@ -48,6 +50,15 @@ export function ModelMarketplace({ models, onSelectModel }: ModelMarketplaceProp
   const categories = useMemo(() => {
     const unique = new Set(models.map(m => m.category || 'other'));
     return Array.from(unique).sort();
+  }, [models]);
+
+  // 获取所有能力/特性
+  const allFeatures = useMemo(() => {
+    const features = new Set<string>();
+    models.forEach(model => {
+      model.supported_features?.forEach(f => features.add(f));
+    });
+    return Array.from(features).sort();
   }, [models]);
 
   // 过滤模型
@@ -75,6 +86,13 @@ export function ModelMarketplace({ models, onSelectModel }: ModelMarketplaceProp
         return false;
       }
 
+      // 能力过滤
+      if (selectedFeature !== 'all') {
+        if (!model.supported_features?.includes(selectedFeature)) {
+          return false;
+        }
+      }
+
       // 价格过滤
       const inputPrice = model.pricing?.input || 0;
       if (inputPrice < priceRange[0] || inputPrice > priceRange[1]) {
@@ -83,7 +101,7 @@ export function ModelMarketplace({ models, onSelectModel }: ModelMarketplaceProp
 
       return true;
     });
-  }, [models, searchQuery, selectedCategory, selectedProvider, priceRange]);
+  }, [models, searchQuery, selectedCategory, selectedProvider, selectedFeature, priceRange]);
 
   const handlePreview = (model: Model) => {
     setSelectedModel(model);
@@ -92,14 +110,54 @@ export function ModelMarketplace({ models, onSelectModel }: ModelMarketplaceProp
 
   const handleSelect = (model: Model) => {
     // 复制模型 ID 到剪贴板
-    navigator.clipboard.writeText(model.id).then(() => {
-      setSnackbarOpen(true);
-    });
+    const copyToClipboard = (text: string) => {
+      // 优先使用现代 API
+      if (navigator.clipboard && window.isSecureContext) {
+        return navigator.clipboard.writeText(text);
+      }
+      // Fallback 到 document.execCommand (非 HTTPS 环境)
+      return new Promise<void>((resolve, reject) => {
+        const textArea = document.createElement('textarea');
+        textArea.value = text;
+        textArea.style.position = 'fixed';
+        textArea.style.left = '-999999px';
+        textArea.style.top = '-999999px';
+        document.body.appendChild(textArea);
+        textArea.focus();
+        textArea.select();
+        try {
+          const successful = document.execCommand('copy');
+          document.body.removeChild(textArea);
+          if (successful) {
+            resolve();
+          } else {
+            reject(new Error('Copy failed'));
+          }
+        } catch (err) {
+          document.body.removeChild(textArea);
+          reject(err);
+        }
+      });
+    };
+
+    copyToClipboard(model.id)
+      .then(() => setSnackbarOpen(true))
+      .catch(() => console.warn('Failed to copy to clipboard'));
 
     if (onSelectModel) {
       onSelectModel(model);
     }
   };
+
+  const handleClearFilters = () => {
+    setSearchQuery('');
+    setSelectedCategory('all');
+    setSelectedProvider('all');
+    setSelectedFeature('all');
+    setPriceRange([0, 1]);
+  };
+
+  const hasActiveFilters = searchQuery || selectedCategory !== 'all' || selectedProvider !== 'all' || selectedFeature !== 'all';
 
   return (
     <Container maxWidth="lg" sx={{ py: 4 }}>
@@ -123,7 +181,11 @@ export function ModelMarketplace({ models, onSelectModel }: ModelMarketplaceProp
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             InputProps={{
-              startAdornment: <Search size={20} style={{ marginRight: 8 }} />,
+              startAdornment: (
+                <InputAdornment position="start">
+                  <Search size={20} />
+                </InputAdornment>
+              ),
             }}
           />
 
@@ -162,6 +224,22 @@ export function ModelMarketplace({ models, onSelectModel }: ModelMarketplaceProp
             </FormControl>
 
             <FormControl sx={{ minWidth: 150 }}>
+              <InputLabel>{t('models.feature')}</InputLabel>
+              <Select
+                value={selectedFeature}
+                onChange={(e) => setSelectedFeature(e.target.value)}
+                label={t('models.feature')}
+              >
+                <MenuItem value="all">{t('models.allFeatures')}</MenuItem>
+                {allFeatures.map((feature) => (
+                  <MenuItem key={feature} value={feature}>
+                    {feature}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+
+            <FormControl sx={{ minWidth: 150 }}>
               <InputLabel>{t('models.priceRange')}</InputLabel>
               <Select
                 value={`${priceRange[0]}-${priceRange[1]}`}
@@ -178,16 +256,11 @@ export function ModelMarketplace({ models, onSelectModel }: ModelMarketplaceProp
               </Select>
             </FormControl>
 
-            {(searchQuery || selectedCategory !== 'all' || selectedProvider !== 'all') && (
+            {hasActiveFilters && (
               <Button
                 variant="outlined"
                 startIcon={<X size={16} />}
-                onClick={() => {
-                  setSearchQuery('');
-                  setSelectedCategory('all');
-                  setSelectedProvider('all');
-                  setPriceRange([0, 1]);
-                }}
+                onClick={handleClearFilters}
               >
                 {t('models.clearFilters')}
               </Button>
@@ -246,7 +319,7 @@ export function ModelMarketplace({ models, onSelectModel }: ModelMarketplaceProp
                   <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 0.5 }}>
                     {t('models.details.description')}
                   </Typography>
-                  <Typography variant="body2">{selectedModel.description}</Typography>
+                  <Typography variant="body2">{selectedModel.description || t('models.noDescription')}</Typography>
                 </Box>
 
                 {selectedModel.pricing && (

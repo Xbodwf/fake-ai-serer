@@ -34,6 +34,7 @@ export function UserNavBar() {
     { label: t('userNav.dashboard'), path: '/dashboard' },
     { label: t('nav.modelMarketplace'), path: '/models' },
     { label: t('userNav.apiKeys'), path: '/keys' },
+    { label: t('userNav.invitation'), path: '/invitation' },
     { label: t('userNav.requests'), path: '/requests' },
     { label: t('userNav.usage'), path: '/usage' },
     { label: t('userNav.billing'), path: '/billing' },

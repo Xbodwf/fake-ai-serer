@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, useCallback } from 'react';
+import { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react';
 import type { ReactNode } from 'react';
 import type { PendingRequest, Model, WSMessage, Stats, SystemSettings, ApiKey } from '../types';
 
@@ -24,6 +24,9 @@ interface ServerContextType {
   updateApiKey: (id: string, updates: Partial<ApiKey>) => Promise<void>;
   deleteApiKey: (id: string) => Promise<void>;
   refreshApiKeys: () => Promise<void>;
+  // WebSocket 连接控制
+  connectWebSocket: () => void;
+  disconnectWebSocket: () => void;
 }
 
 const ServerContext = createContext<ServerContextType | null>(null);
@@ -42,6 +45,8 @@ export function ServerProvider({ children }: { children: ReactNode }) {
   const [stats, setStats] = useState<Stats>({ pendingRequests: 0, connectedClients: 0, totalModels: 0 });
   const [settings, setSettings] = useState<SystemSettings>({ streamDelay: 500, port: 7143 });
   const [apiKeys, setApiKeys] = useState<ApiKey[]>([]);
+  const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const shouldReconnectRef = useRef(false);
 
   const fetchModels = useCallback(async () => {
     try {
@@ -58,36 +63,8 @@ export function ServerProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  // 初始化时只获取模型和其他数据，不连接 WebSocket
   useEffect(() => {
-    const connect = () => {
-      const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
-      const wsUrl = `${protocol}//${location.host}`;
-      const socket = new WebSocket(wsUrl);
-
-      socket.onopen = () => {
-        setConnected(true);
-        setWs(socket);
-      };
-
-      socket.onclose = () => {
-        setConnected(false);
-        setWs(null);
-        setTimeout(connect, 3000);
-      };
-
-      socket.onmessage = (event) => {
-        try {
-          const msg: WSMessage = JSON.parse(event.data);
-          handleMessage(msg);
-        } catch (e) {
-          console.error('Parse error:', e);
-        }
-      };
-    };
-
-    connect();
-
-    // Fetch initial data
     fetchModels();
 
     const token = localStorage.getItem('token');
@@ -145,6 +122,77 @@ export function ServerProvider({ children }: { children: ReactNode }) {
       }
     }
   }, []);
+
+  // 连接 WebSocket
+  const connectWebSocket = useCallback(() => {
+    if (ws && ws.readyState === WebSocket.OPEN) return; // 已连接
+    
+    shouldReconnectRef.current = true;
+    
+    const connect = () => {
+      if (!shouldReconnectRef.current) return;
+      
+      const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const wsUrl = `${protocol}//${location.host}`;
+      const socket = new WebSocket(wsUrl);
+
+      socket.onopen = () => {
+        setConnected(true);
+        setWs(socket);
+      };
+
+      socket.onclose = () => {
+        setConnected(false);
+        setWs(null);
+        // 只有在需要重连时才重连
+        if (shouldReconnectRef.current) {
+          reconnectTimeoutRef.current = setTimeout(connect, 3000);
+        }
+      };
+
+      socket.onmessage = (event) => {
+        try {
+          const msg: WSMessage = JSON.parse(event.data);
+          handleMessage(msg);
+        } catch (e) {
+          console.error('Parse error:', e);
+        }
+      };
+    };
+
+    connect();
+  }, [ws, handleMessage]);
+
+  // 断开 WebSocket
+  const disconnectWebSocket = useCallback(() => {
+    shouldReconnectRef.current = false;
+    
+    if (reconnectTimeoutRef.current) {
+      clearTimeout(reconnectTimeoutRef.current);
+      reconnectTimeoutRef.current = null;
+    }
+    
+    if (ws) {
+      ws.close();
+      setWs(null);
+    }
+    
+    setConnected(false);
+    setPendingRequests(new Map());
+  }, [ws]);
+
+  // 组件卸载时断开连接
+  useEffect(() => {
+    return () => {
+      shouldReconnectRef.current = false;
+      if (reconnectTimeoutRef.current) {
+        clearTimeout(reconnectTimeoutRef.current);
+      }
+      if (ws) {
+        ws.close();
+      }
+    };
+  }, [ws]);
 
   const sendResponse = useCallback((requestId: string, content: string) => {
     if (!ws) return;
@@ -355,6 +403,8 @@ export function ServerProvider({ children }: { children: ReactNode }) {
       updateApiKey: updateApiKeyCallback,
       deleteApiKey: deleteApiKeyCallback,
       refreshApiKeys,
+      connectWebSocket,
+      disconnectWebSocket,
     }}>
       {children}
     </ServerContext.Provider>

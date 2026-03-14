@@ -11,6 +11,12 @@ import {
   getUserUsageRecords,
   getUsageRecordsByDateRange,
   getUserInvoices,
+  getInvitationRecordsByInviter,
+  getAvailableInviteQuota,
+  getMonthlyInviteCount,
+  getAllUsers,
+  getActiveNotifications,
+  loadNotifications,
 } from '../storage.js';
 import { hashPassword, verifyPassword } from '../auth.js';
 
@@ -317,6 +323,117 @@ router.get('/usage/records', authMiddleware, (req: AuthRequest, res: Response) =
     res.json(records);
   } catch (error) {
     res.status(500).json({ error: 'Failed to get usage records' });
+  }
+});
+
+// ==================== 邀请系统 ====================
+
+/**
+ * 获取邀请信息
+ */
+router.get('/invitation', authMiddleware, (req: AuthRequest, res: Response) => {
+  try {
+    const user = getUserById(req.userId!);
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    const invitationRecords = getInvitationRecordsByInviter(req.userId!);
+    const availableQuota = getAvailableInviteQuota(user);
+    const monthlyUsed = getMonthlyInviteCount(req.userId!);
+
+    // 获取被邀请人的详细信息
+    const allUsers = getAllUsers();
+    const invitedUsers = invitationRecords.map(record => {
+      const invitee = allUsers.find(u => u.id === record.inviteeId);
+      return {
+        id: record.id,
+        inviteeId: record.inviteeId,
+        inviteeUsername: invitee?.username || 'Unknown',
+        inviteeEmail: invitee?.email || '',
+        createdAt: record.createdAt,
+      };
+    });
+
+    res.json({
+      inviteCode: user.inviteCode,
+      invitedBy: user.invitedBy,
+      availableQuota: user.role === 'admin' ? 'unlimited' : availableQuota,
+      monthlyQuota: user.role === 'admin' ? 'unlimited' : 5,
+      monthlyUsed,
+      extraInviteQuota: user.extraInviteQuota || 0,
+      totalInvited: invitationRecords.length,
+      invitedUsers,
+    });
+  } catch (error) {
+    console.error('[Get Invitation Error]', error);
+    res.status(500).json({ error: 'Failed to get invitation info' });
+  }
+});
+
+/**
+ * 购买邀请次数
+ */
+router.post('/invitation/purchase', authMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    const { quantity } = req.body;
+    const user = getUserById(req.userId!);
+
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    // admin 不需要购买
+    if (user.role === 'admin') {
+      return res.status(400).json({ error: 'Admin has unlimited invitations' });
+    }
+
+    // 验证数量
+    const qty = parseInt(quantity) || 1;
+    if (qty < 1 || qty > 10) {
+      return res.status(400).json({ error: 'Quantity must be between 1 and 10' });
+    }
+
+    // 计算费用：每次 $2
+    const cost = qty * 2;
+
+    // 检查余额
+    if (user.balance < cost) {
+      return res.status(400).json({ error: 'Insufficient balance', required: cost, current: user.balance });
+    }
+
+    // 扣除余额并增加邀请次数
+    await updateUser(req.userId!, {
+      balance: user.balance - cost,
+      extraInviteQuota: (user.extraInviteQuota || 0) + qty,
+    });
+
+    res.json({
+      success: true,
+      purchased: qty,
+      cost,
+      newBalance: user.balance - cost,
+      extraInviteQuota: (user.extraInviteQuota || 0) + qty,
+    });
+  } catch (error) {
+    console.error('[Purchase Invitation Error]', error);
+    res.status(500).json({ error: 'Failed to purchase invitations' });
+  }
+});
+
+// ==================== 通知系统 ====================
+
+/**
+ * 获取通知列表
+ */
+router.get('/notifications', authMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    await loadNotifications();
+    const notifications = getActiveNotifications();
+    res.json(notifications);
+  } catch (error) {
+    console.error('[Get Notifications Error]', error);
+    res.status(500).json({ error: 'Failed to get notifications' });
   }
 });
 

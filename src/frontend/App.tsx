@@ -17,12 +17,14 @@ import { UserRequestsPage } from './pages/UserRequestsPage';
 import { UserUsagePage } from './pages/UserUsagePage';
 import { UserBillingPage } from './pages/UserBillingPage';
 import { UserProfilePage } from './pages/UserProfilePage';
+import { UserInvitationPage } from './pages/UserInvitationPage';
 import { ActionsPage } from './pages/ActionsPage';
 import { ActionEditorPage } from './pages/ActionEditorPage';
 import { AdminDashboard } from './pages/AdminDashboard';
 import { AdminUsersPage } from './pages/AdminUsersPage';
 import { AdminUserRequestsPage } from './pages/AdminUserRequestsPage';
 import { AdminSettingsPage } from './pages/AdminSettingsPage';
+import { AdminNotificationsPage } from './pages/AdminNotificationsPage';
 import { ModelMarketplace } from './pages/ModelMarketplace';
 import ModelManager from './components/ModelManager';
 
@@ -233,6 +235,16 @@ function AppContent() {
               }
             />
             <Route
+              path="/invitation"
+              element={
+                <ProtectedRoute>
+                  <UserLayout>
+                    <UserInvitationPage />
+                  </UserLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
               path="/actions"
               element={
                 <ProtectedRoute>
@@ -298,6 +310,16 @@ function AppContent() {
                 <ProtectedRoute requiredRole="admin">
                   <AdminLayout>
                     <AdminSettingsPage />
+                  </AdminLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/console/notifications"
+              element={
+                <ProtectedRoute requiredRole="admin">
+                  <AdminLayout>
+                    <AdminNotificationsPage />
                   </AdminLayout>
                 </ProtectedRoute>
               }

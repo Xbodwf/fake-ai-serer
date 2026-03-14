@@ -1,6 +1,18 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { hashPassword, verifyPassword, generateToken, generateRefreshToken, verifyRefreshToken } from '../auth.js';
-import { createUser, getUserByUsername, getUserByEmail, updateUser, getSettings } from '../storage.js';
+import { 
+  createUser, 
+  getUserByUsername, 
+  getUserByEmail, 
+  updateUser, 
+  getSettings,
+  getUserByInviteCode,
+  getAvailableInviteQuota,
+  generateInviteCode,
+  createInvitationRecord,
+  loadInvitationRecords,
+  loadUsers
+} from '../storage.js';
 import { authMiddleware, AuthRequest } from '../middleware.js';
 import { generateVerificationCode, sendVerificationEmail, storeVerificationCode, verifyCode } from '../email.js';
 
@@ -60,7 +72,7 @@ router.post('/send-verification-code', async (req: Request, res: Response) => {
  */
 router.post('/register', async (req: Request, res: Response) => {
   try {
-    const { username, email, password, verificationCode } = req.body;
+    const { username, email, password, verificationCode, inviteCode } = req.body;
 
     // 验证输入
     if (!username || !email || !password) {
@@ -69,6 +81,27 @@ router.post('/register', async (req: Request, res: Response) => {
 
     if (password.length < 6) {
       return res.status(400).json({ error: 'Password must be at least 6 characters' });
+    }
+
+    // 检查邀请码（现在邀请码是必需的）
+    if (!inviteCode) {
+      return res.status(400).json({ error: 'Invite code is required' });
+    }
+
+    // 确保数据已加载
+    await loadUsers();
+    await loadInvitationRecords();
+
+    // 验证邀请码
+    const inviter = getUserByInviteCode(inviteCode);
+    if (!inviter) {
+      return res.status(400).json({ error: 'Invalid invite code' });
+    }
+
+    // 检查邀请人是否有可用邀请次数
+    const availableQuota = getAvailableInviteQuota(inviter);
+    if (availableQuota <= 0) {
+      return res.status(400).json({ error: 'Invite code has no remaining quota' });
     }
 
     // 检查用户是否已存在
@@ -93,8 +126,10 @@ router.post('/register', async (req: Request, res: Response) => {
       }
     }
 
-    // 创建用户
+    // 创建用户（包含邀请码和邀请人信息）
     const passwordHash = await hashPassword(password);
+    const userInviteCode = generateInviteCode();
+    
     const user = await createUser({
       username,
       email,
@@ -103,7 +138,24 @@ router.post('/register', async (req: Request, res: Response) => {
       totalUsage: 0,
       enabled: true,
       role: 'user',
+      inviteCode: userInviteCode,
+      invitedBy: inviter.id,
     });
+
+    // 创建邀请记录
+    await createInvitationRecord({
+      inviterId: inviter.id,
+      inviteeId: user.id,
+      inviteCode: inviteCode,
+      createdAt: Date.now(),
+    });
+
+    // 如果邀请人是普通用户且有额外邀请次数，扣除一次
+    if (inviter.role !== 'admin' && inviter.extraInviteQuota && inviter.extraInviteQuota > 0) {
+      await updateUser(inviter.id, {
+        extraInviteQuota: inviter.extraInviteQuota - 1,
+      });
+    }
 
     // 生成 token
     const token = generateToken({
@@ -124,6 +176,7 @@ router.post('/register', async (req: Request, res: Response) => {
         enabled: user.enabled,
         totalUsage: user.totalUsage,
         createdAt: user.createdAt,
+        inviteCode: user.inviteCode,
       },
       token,
       refreshToken,
@@ -181,6 +234,7 @@ router.post('/login', async (req: Request, res: Response) => {
         enabled: user.enabled,
         totalUsage: user.totalUsage,
         createdAt: user.createdAt,
+        inviteCode: user.inviteCode,
       },
       token,
       refreshToken,
@@ -247,6 +301,9 @@ router.get('/me', authMiddleware, async (req: AuthRequest, res: Response) => {
       totalUsage: user.totalUsage,
       createdAt: user.createdAt,
       lastLoginAt: user.lastLoginAt,
+      inviteCode: user.inviteCode,
+      invitedBy: user.invitedBy,
+      extraInviteQuota: user.extraInviteQuota,
     });
   } catch (error) {
     console.error('[Get Me Error]', error);

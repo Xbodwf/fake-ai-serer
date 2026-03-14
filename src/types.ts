@@ -138,6 +138,31 @@ export interface User {
     apiKeyExpiry?: number;         // API Key 过期时间（天）
     theme?: ThemeConfig;           // 用户主题偏好
   };
+  // 邀请系统相关
+  inviteCode?: string;             // 用户的邀请码
+  invitedBy?: string;              // 邀请人 ID
+  extraInviteQuota?: number;       // 额外购买的邀请次数
+}
+
+// 邀请记录
+export interface InvitationRecord {
+  id: string;
+  inviterId: string;               // 邀请人 ID
+  inviteeId: string;               // 被邀请人 ID
+  inviteCode: string;              // 使用的邀请码
+  createdAt: number;               // 邀请时间
+}
+
+// 站内通知
+export interface Notification {
+  id: string;
+  title: string;                   // 通知标题
+  content: string;                 // 通知内容 (Markdown 格式)
+  createdAt: number;               // 创建时间
+  updatedAt?: number;              // 更新时间
+  createdBy: string;               // 创建者 ID
+  isPinned?: boolean;              // 是否置顶
+  isActive?: boolean;              // 是否启用
 }
 
 // 使用记录

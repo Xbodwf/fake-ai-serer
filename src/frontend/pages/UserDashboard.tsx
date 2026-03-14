@@ -14,6 +14,7 @@ import {
 } from '@mui/material';
 import { useAuth } from '../contexts/AuthContext';
 import { LoadingSpinner } from '../components/LoadingSpinner';
+import { NotificationCenter } from '../components/NotificationCenter';
 import axios from 'axios';
 
 interface DashboardStats {
@@ -161,6 +162,12 @@ export function UserDashboard() {
             </Button>
             <Button
               variant="outlined"
+              onClick={() => navigate('/invitation')}
+            >
+              {t('userNav.invitation')}
+            </Button>
+            <Button
+              variant="outlined"
               onClick={() => navigate('/actions')}
             >
               {t('dashboard.manageActions')}
@@ -168,6 +175,11 @@ export function UserDashboard() {
           </Stack>
         </CardContent>
       </Card>
+
+      {/* 公告通知 */}
+      <Box sx={{ mb: 4 }}>
+        <NotificationCenter maxItems={3} />
+      </Box>
 
       {/* 用户信息 */}
       <Card>

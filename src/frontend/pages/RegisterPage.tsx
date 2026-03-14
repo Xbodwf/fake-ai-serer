@@ -25,12 +25,22 @@ export function RegisterPage() {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [verificationCode, setVerificationCode] = useState('');
+  const [inviteCode, setInviteCode] = useState('');
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(false);
   const [sendingCode, setSendingCode] = useState(false);
   const [codeSent, setCodeSent] = useState(false);
   const [countdown, setCountdown] = useState(0);
+
+  // 从 URL 参数获取邀请码
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const code = params.get('invite');
+    if (code) {
+      setInviteCode(code);
+    }
+  }, []);
 
   // 倒计时
   useEffect(() => {
@@ -77,6 +87,11 @@ export function RegisterPage() {
       return;
     }
 
+    if (!inviteCode) {
+      setError(t('auth.inviteCodeRequired'));
+      return;
+    }
+
     setLoading(true);
 
     try {
@@ -85,6 +100,7 @@ export function RegisterPage() {
         email,
         password,
         verificationCode,
+        inviteCode,
       });
 
       // 保存 token
@@ -146,6 +162,18 @@ export function RegisterPage() {
 
             <form onSubmit={handleRegister}>
               <Stack spacing={2}>
+                {/* 邀请码输入 */}
+                <TextField
+                  fullWidth
+                  label={t('auth.inviteCode')}
+                  value={inviteCode}
+                  onChange={(e) => setInviteCode(e.target.value.toUpperCase())}
+                  disabled={loading}
+                  required
+                  placeholder={t('auth.inviteCodePlaceholder')}
+                  helperText={t('auth.inviteCodeHelper')}
+                />
+
                 <TextField
                   fullWidth
                   label={t('auth.username')}

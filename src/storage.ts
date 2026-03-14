@@ -1,6 +1,6 @@
 import { readFile, writeFile, access, mkdir } from 'fs/promises';
 import { join } from 'path';
-import type { Model, ApiKey, User, UsageRecord, Invoice, Action, Workflow } from './types.js';
+import type { Model, ApiKey, User, UsageRecord, Invoice, Action, Workflow, InvitationRecord, Notification } from './types.js';
 import { randomBytes } from 'crypto';
 
 const DATA_DIR = join(process.cwd(), 'data');
@@ -12,6 +12,8 @@ const USAGE_RECORDS_FILE = join(DATA_DIR, 'usage_records.json');
 const INVOICES_FILE = join(DATA_DIR, 'invoices.json');
 const ACTIONS_FILE = join(DATA_DIR, 'actions.json');
 const WORKFLOWS_FILE = join(DATA_DIR, 'workflows.json');
+const INVITATIONS_FILE = join(DATA_DIR, 'invitations.json');
+const NOTIFICATIONS_FILE = join(DATA_DIR, 'notifications.json');
 
 export interface ServerConfig {
   port: number;
@@ -370,10 +372,23 @@ export async function loadUsers(): Promise<User[]> {
         createdAt: Date.now(),
         enabled: true,
         role: 'admin',
+        inviteCode: generateInviteCode(),
       };
       users.push(adminUser);
       await saveUsers();
       console.log('[Storage] 创建默认管理员用户: admin / admin123');
+    } else {
+      // 确保所有用户都有邀请码
+      let needsSave = false;
+      for (const user of users) {
+        if (!user.inviteCode) {
+          user.inviteCode = generateInviteCode();
+          needsSave = true;
+        }
+      }
+      if (needsSave) {
+        await saveUsers();
+      }
     }
 
     return users;
@@ -683,5 +698,159 @@ export async function deleteWorkflow(id: string): Promise<boolean> {
 
   workflows.splice(index, 1);
   await saveWorkflows();
+  return true;
+}
+
+// ==================== 邀请记录管理 ====================
+
+let invitationRecords: InvitationRecord[] = [];
+
+export async function loadInvitationRecords(): Promise<InvitationRecord[]> {
+  if (invitationRecords.length > 0) return invitationRecords;
+
+  try {
+    await ensureDir();
+    await ensureFile(INVITATIONS_FILE, []);
+    const content = await readFile(INVITATIONS_FILE, 'utf-8');
+    invitationRecords = JSON.parse(content);
+    return invitationRecords;
+  } catch (e) {
+    console.warn('[Storage] 加载邀请记录失败:', e);
+    invitationRecords = [];
+    return invitationRecords;
+  }
+}
+
+async function saveInvitationRecords(): Promise<void> {
+  await writeFile(INVITATIONS_FILE, JSON.stringify(invitationRecords, null, 2));
+}
+
+export function getAllInvitationRecords(): InvitationRecord[] {
+  return invitationRecords;
+}
+
+export function getInvitationRecordsByInviter(inviterId: string): InvitationRecord[] {
+  return invitationRecords.filter(r => r.inviterId === inviterId);
+}
+
+export function getInvitationRecordsByInvitee(inviteeId: string): InvitationRecord | undefined {
+  return invitationRecords.find(r => r.inviteeId === inviteeId);
+}
+
+export async function createInvitationRecord(record: Omit<InvitationRecord, 'id'>): Promise<InvitationRecord> {
+  const newRecord: InvitationRecord = {
+    ...record,
+    id: `inv_${Date.now()}`,
+  };
+  invitationRecords.push(newRecord);
+  await saveInvitationRecords();
+  return newRecord;
+}
+
+// 生成邀请码
+export function generateInviteCode(): string {
+  return randomBytes(6).toString('base64url').toUpperCase();
+}
+
+// 根据邀请码查找用户
+export function getUserByInviteCode(inviteCode: string): User | undefined {
+  return users.find(u => u.inviteCode === inviteCode);
+}
+
+// 获取用户本月邀请数量
+export function getMonthlyInviteCount(inviterId: string): number {
+  const now = Date.now();
+  const oneMonthAgo = now - 30 * 24 * 60 * 60 * 1000;
+  return invitationRecords.filter(
+    r => r.inviterId === inviterId && r.createdAt >= oneMonthAgo
+  ).length;
+}
+
+// 获取用户可用邀请次数
+export function getAvailableInviteQuota(user: User): number {
+  // admin 无限次数
+  if (user.role === 'admin') return Infinity;
+  
+  const monthlyUsed = getMonthlyInviteCount(user.id);
+  const monthlyQuota = 5; // 每月5次
+  const extraQuota = user.extraInviteQuota || 0;
+  
+  return Math.max(0, monthlyQuota - monthlyUsed) + extraQuota;
+}
+
+// ==================== 通知管理 ====================
+
+let notifications: Notification[] = [];
+
+export async function loadNotifications(): Promise<Notification[]> {
+  if (notifications.length > 0) return notifications;
+
+  try {
+    await ensureDir();
+    await ensureFile(NOTIFICATIONS_FILE, []);
+    const content = await readFile(NOTIFICATIONS_FILE, 'utf-8');
+    notifications = JSON.parse(content);
+    return notifications;
+  } catch (e) {
+    console.warn('[Storage] 加载通知失败:', e);
+    notifications = [];
+    return notifications;
+  }
+}
+
+async function saveNotifications(): Promise<void> {
+  await writeFile(NOTIFICATIONS_FILE, JSON.stringify(notifications, null, 2));
+}
+
+export function getAllNotifications(): Notification[] {
+  return notifications;
+}
+
+export function getActiveNotifications(): Notification[] {
+  return notifications
+    .filter(n => n.isActive !== false)
+    .sort((a, b) => {
+      // 置顶优先，然后按创建时间倒序
+      if (a.isPinned && !b.isPinned) return -1;
+      if (!a.isPinned && b.isPinned) return 1;
+      return b.createdAt - a.createdAt;
+    });
+}
+
+export function getNotificationById(id: string): Notification | undefined {
+  return notifications.find(n => n.id === id);
+}
+
+export async function createNotification(notification: Omit<Notification, 'id' | 'createdAt'>): Promise<Notification> {
+  const newNotification: Notification = {
+    ...notification,
+    id: `notif_${Date.now()}`,
+    createdAt: Date.now(),
+    isActive: true,
+  };
+  notifications.push(newNotification);
+  await saveNotifications();
+  return newNotification;
+}
+
+export async function updateNotification(id: string, updates: Partial<Notification>): Promise<Notification | null> {
+  const index = notifications.findIndex(n => n.id === id);
+  if (index === -1) return null;
+
+  notifications[index] = {
+    ...notifications[index],
+    ...updates,
+    updatedAt: Date.now(),
+  };
+  await saveNotifications();
+  return notifications[index];
+}
+
+export async function deleteNotification(id: string): Promise<boolean> {
+  const index = notifications.findIndex(n => n.id === id);
+  if (index === -1) return false;
+
+  notifications.splice(index, 1);
+  await saveNotifications();
   return true;
 }

@@ -51,7 +51,11 @@
     "retryAfter": "{{seconds}}秒后重试",
     "emailRequired": "请输入邮箱",
     "sendCodeFailed": "发送验证码失败",
-    "codeSentSuccess": "验证码已发送，请查收邮件"
+    "codeSentSuccess": "验证码已发送，请查收邮件",
+    "inviteCode": "邀请码",
+    "inviteCodePlaceholder": "请输入邀请码",
+    "inviteCodeHelper": "注册需要邀请码",
+    "inviteCodeRequired": "请输入邀请码"
   },
   "nav": {
     "home": "首页",
@@ -62,7 +66,8 @@
     "requests": "请求队列",
     "adminConsole": "管理员控制台",
     "adminMenu": "管理员菜单",
-    "loginSettings": "登录设置"
+    "loginSettings": "登录设置",
+    "notifications": "通知管理"
   },
   "userNav": {
     "dashboard": "仪表板",
@@ -72,7 +77,8 @@
     "profile": "个人资料",
     "actions": "Actions",
     "requests": "请求队列",
-    "adminConsole": "管理员控制台"
+    "adminConsole": "管理员控制台",
+    "invitation": "邀请管理"
   },
   "adminNav": {
     "dashboard": "仪表板",
@@ -129,6 +135,8 @@
     "select": "选择",
     "composite": "组合模型",
     "copiedToClipboard": "已复制模型 ID 到剪贴板",
+    "feature": "能力",
+    "allFeatures": "所有能力",
     "manager": {
       "totalModels": "共 {{count}} 个模型",
       "addModel": "添加模型",
@@ -265,13 +273,25 @@
     "totalTokens": "总 Tokens 数",
     "totalCost": "总成本",
     "usageByModel": "按模型统计使用",
+    "usageByDate": "按日期统计",
     "model": "模型",
     "requests": "请求数",
     "tokens": "Tokens",
     "cost": "成本",
     "noUsageData": "暂无使用数据",
     "usageByEndpoint": "按端点统计使用",
-    "endpoint": "端点"
+    "endpoint": "端点",
+    "timeRange": "时间范围",
+    "last7Days": "最近7天",
+    "last30Days": "最近30天",
+    "last90Days": "最近90天",
+    "allTime": "全部时间",
+    "allModels": "所有模型",
+    "allEndpoints": "所有端点",
+    "date": "日期",
+    "time": "时间",
+    "detailedRecords": "详细记录",
+    "showingFirst100": "显示前 100 条，共 {{total}} 条记录"
   },
   "billing": {
     "title": "账单和发票",
@@ -316,5 +336,59 @@
     "noRequests": "暂无请求",
     "waitingForRequests": "等待请求中...",
     "requestWillAppear": "当有 API 请求到达时会自动显示在这里"
+  },
+  "invitation": {
+    "title": "邀请管理",
+    "description": "邀请新用户并管理您的邀请配额",
+    "yourInviteCode": "您的邀请码",
+    "copyCode": "复制邀请码",
+    "copyLink": "复制邀请链接",
+    "codeCopied": "邀请码已复制到剪贴板",
+    "linkCopied": "邀请链接已复制到剪贴板",
+    "quotaStatus": "配额状态",
+    "buyQuota": "购买次数",
+    "availableQuota": "可用次数",
+    "monthlyUsed": "本月已用",
+    "extraQuota": "额外配额",
+    "totalInvited": "累计邀请",
+    "unlimited": "无限",
+    "invitedUsers": "已邀请用户",
+    "noInvitedUsers": "暂无邀请记录",
+    "username": "用户名",
+    "email": "邮箱",
+    "invitedAt": "邀请时间",
+    "quantity": "购买数量",
+    "totalCost": "总计：${{cost}}",
+    "purchaseInfo": "购买额外邀请次数，每次 $2",
+    "purchaseSuccess": "成功购买 {{count}} 次邀请次数，花费 ${{cost}}",
+    "inviter": "邀请人",
+    "invitedBy": "邀请人",
+    "inviteCount": "邀请人数"
+  },
+  "notifications": {
+    "title": "站内公告",
+    "manageTitle": "通知管理",
+    "manageDescription": "创建和管理站内公告",
+    "create": "创建通知",
+    "edit": "编辑通知",
+    "titleLabel": "标题",
+    "contentLabel": "内容（支持 Markdown）",
+    "contentHelper": "可使用 Markdown 语法进行格式化",
+    "pinLabel": "置顶显示",
+    "activeLabel": "启用",
+    "noNotifications": "暂无通知",
+    "pinned": "已置顶",
+    "active": "已启用",
+    "inactive": "已禁用",
+    "activate": "启用",
+    "deactivate": "禁用",
+    "preview": "预览",
+    "status": "状态",
+    "createdAt": "创建时间",
+    "createSuccess": "通知创建成功",
+    "updateSuccess": "通知更新成功",
+    "deleteSuccess": "通知删除成功",
+    "deleteConfirm": "删除通知",
+    "deleteConfirmMessage": "确定要删除此通知吗？"
   }
 }

@@ -23,24 +23,41 @@ import {
   Chip,
   IconButton,
   Alert,
+  Tooltip,
 } from '@mui/material';
-import { Edit2, Trash2, FileText } from 'lucide-react';
+import { Edit2, Trash2, FileText, Copy, UserPlus } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { LoadingSpinner } from '../components/LoadingSpinner';
 import axios from 'axios';
-import type { User } from '../../types.js';
+
+interface AdminUser {
+  id: string;
+  username: string;
+  email: string;
+  balance: number;
+  totalUsage: number;
+  role: 'user' | 'admin';
+  enabled: boolean;
+  createdAt: number;
+  lastLoginAt?: number;
+  inviteCode?: string;
+  invitedBy?: string;
+  invitedByName?: string | null;
+  invitationCount?: number;
+}
 
 export function AdminUsersPage() {
   const navigate = useNavigate();
   const { user, token } = useAuth();
   const { t } = useTranslation();
-  const [users, setUsers] = useState<User[]>([]);
+  const [users, setUsers] = useState<AdminUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [selectedUser, setSelectedUser] = useState<User | null>(null);
+  const [selectedUser, setSelectedUser] = useState<AdminUser | null>(null);
   const [showEditDialog, setShowEditDialog] = useState(false);
   const [editBalance, setEditBalance] = useState('');
   const [editEnabled, setEditEnabled] = useState(true);
+  const [snackbar, setSnackbar] = useState('');
 
   useEffect(() => {
     if (!user || !token || user.role !== 'admin') {
@@ -64,7 +81,7 @@ export function AdminUsersPage() {
     }
   };
 
-  const handleEditUser = (u: User) => {
+  const handleEditUser = (u: AdminUser) => {
     setSelectedUser(u);
     setEditBalance(u.balance.toString());
     setEditEnabled(u.enabled);
@@ -104,6 +121,35 @@ export function AdminUsersPage() {
     }
   };
 
+  const copyInviteCode = (code: string) => {
+    // 支持 HTTPS 和非 HTTPS 环境
+    const copyToClipboard = (text: string) => {
+      if (navigator.clipboard && window.isSecureContext) {
+        return navigator.clipboard.writeText(text);
+      }
+      return new Promise<void>((resolve, reject) => {
+        const textArea = document.createElement('textarea');
+        textArea.value = text;
+        textArea.style.position = 'fixed';
+        textArea.style.left = '-999999px';
+        document.body.appendChild(textArea);
+        textArea.select();
+        try {
+          document.execCommand('copy');
+          document.body.removeChild(textArea);
+          resolve();
+        } catch (err) {
+          document.body.removeChild(textArea);
+          reject(err);
+        }
+      });
+    };
+
+    copyToClipboard(code)
+      .then(() => setSnackbar(t('invitation.codeCopied')))
+      .catch(() => {});
+  };
+
   if (loading) {
     return <LoadingSpinner />;
   }
@@ -125,8 +171,14 @@ export function AdminUsersPage() {
       </Box>
 
       {error && (
-        <Alert severity="error" sx={{ mb: 3 }}>
+        <Alert severity="error" sx={{ mb: 3 }} onClose={() => setError('')}>
           {error}
+        </Alert>
+      )}
+
+      {snackbar && (
+        <Alert severity="success" sx={{ mb: 3 }} onClose={() => setSnackbar('')}>
+          {snackbar}
         </Alert>
       )}
 
@@ -143,6 +195,8 @@ export function AdminUsersPage() {
                   <TableRow sx={{ backgroundColor: 'action.hover' }}>
                     <TableCell>{t('common.name')}</TableCell>
                     <TableCell>{t('common.email')}</TableCell>
+                    <TableCell>{t('invitation.inviter')}</TableCell>
+                    <TableCell align="center">{t('invitation.inviteCount')}</TableCell>
                     <TableCell align="right">{t('admin.balance')}</TableCell>
                     <TableCell align="right">{t('admin.totalUsage')}</TableCell>
                     <TableCell>{t('common.role')}</TableCell>
@@ -153,9 +207,40 @@ export function AdminUsersPage() {
                 </TableHead>
                 <TableBody>
                   {users.map((u) => (
-                    <TableRow key={u.id}>
+                    <TableRow key={u.id} hover>
                       <TableCell sx={{ fontWeight: 500 }}>{u.username}</TableCell>
                       <TableCell>{u.email}</TableCell>
+                      <TableCell>
+                        {u.invitedByName ? (
+                          <Chip
+                            label={u.invitedByName}
+                            size="small"
+                            variant="outlined"
+                            color="primary"
+                          />
+                        ) : (
+                          <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+                            -
+                          </Typography>
+                        )}
+                      </TableCell>
+                      <TableCell align="center">
+                        {u.invitationCount && u.invitationCount > 0 ? (
+                          <Tooltip title={t('invitation.viewInvited')}>
+                            <Chip
+                              icon={<UserPlus size={14} />}
+                              label={u.invitationCount}
+                              size="small"
+                              color="success"
+                              variant="outlined"
+                            />
+                          </Tooltip>
+                        ) : (
+                          <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+                            0
+                          </Typography>
+                        )}
+                      </TableCell>
                       <TableCell align="right">${u.balance.toFixed(2)}</TableCell>
                       <TableCell align="right">{u.totalUsage}</TableCell>
                       <TableCell>
@@ -177,28 +262,40 @@ export function AdminUsersPage() {
                         {new Date(u.createdAt).toLocaleDateString()}
                       </TableCell>
                       <TableCell align="right">
-                        <IconButton
-                          size="small"
-                          onClick={() => navigate(`/console/users/${u.id}/requests`)}
-                          title={t('admin.viewRequests')}
-                        >
-                          <FileText size={18} />
-                        </IconButton>
-                        <IconButton
-                          size="small"
-                          onClick={() => handleEditUser(u)}
-                          title={t('admin.editUser')}
-                        >
-                          <Edit2 size={18} />
-                        </IconButton>
-                        <IconButton
-                          size="small"
-                          onClick={() => handleDeleteUser(u.id)}
-                          color="error"
-                          title={t('admin.deleteUser')}
-                        >
-                          <Trash2 size={18} />
-                        </IconButton>
+                        <Stack direction="row" spacing={0.5} justifyContent="flex-end">
+                          {u.inviteCode && (
+                            <Tooltip title={t('invitation.copyInviteCode')}>
+                              <IconButton
+                                size="small"
+                                onClick={() => copyInviteCode(u.inviteCode!)}
+                              >
+                                <Copy size={18} />
+                              </IconButton>
+                            </Tooltip>
+                          )}
+                          <IconButton
+                            size="small"
+                            onClick={() => navigate(`/console/users/${u.id}/requests`)}
+                            title={t('admin.viewRequests')}
+                          >
+                            <FileText size={18} />
+                          </IconButton>
+                          <IconButton
+                            size="small"
+                            onClick={() => handleEditUser(u)}
+                            title={t('admin.editUser')}
+                          >
+                            <Edit2 size={18} />
+                          </IconButton>
+                          <IconButton
+                            size="small"
+                            onClick={() => handleDeleteUser(u.id)}
+                            color="error"
+                            title={t('admin.deleteUser')}
+                          >
+                            <Trash2 size={18} />
+                          </IconButton>
+                        </Stack>
                       </TableCell>
                     </TableRow>
                   ))}
@@ -216,12 +313,34 @@ export function AdminUsersPage() {
           <Stack spacing={2} sx={{ mt: 2 }}>
             <TextField
               fullWidth
+              label={t('common.name')}
+              value={selectedUser?.username || ''}
+              disabled
+            />
+            <TextField
+              fullWidth
               label={t('admin.balance')}
               type="number"
               value={editBalance}
               onChange={(e) => setEditBalance(e.target.value)}
               inputProps={{ step: '0.01' }}
             />
+            {selectedUser?.inviteCode && (
+              <TextField
+                fullWidth
+                label={t('invitation.inviteCode')}
+                value={selectedUser.inviteCode}
+                disabled
+              />
+            )}
+            {selectedUser?.invitedByName && (
+              <TextField
+                fullWidth
+                label={t('invitation.invitedBy')}
+                value={selectedUser.invitedByName}
+                disabled
+              />
+            )}
             <Box>
               <Typography variant="body2" sx={{ mb: 1 }}>
                 {t('common.status')}

@@ -51,7 +51,11 @@
     "retryAfter": "Retry after {{seconds}}s",
     "emailRequired": "Please enter email",
     "sendCodeFailed": "Failed to send verification code",
-    "codeSentSuccess": "Verification code sent, please check your email"
+    "codeSentSuccess": "Verification code sent, please check your email",
+    "inviteCode": "Invite Code",
+    "inviteCodePlaceholder": "Enter your invite code",
+    "inviteCodeHelper": "Registration requires an invite code",
+    "inviteCodeRequired": "Invite code is required"
   },
   "nav": {
     "home": "Home",
@@ -62,7 +66,8 @@
     "requests": "Request Queue",
     "adminConsole": "Admin Console",
     "adminMenu": "Admin Menu",
-    "loginSettings": "Login Settings"
+    "loginSettings": "Login Settings",
+    "notifications": "Notifications"
   },
   "userNav": {
     "dashboard": "Dashboard",
@@ -72,7 +77,8 @@
     "profile": "Profile",
     "actions": "Actions",
     "requests": "Request Queue",
-    "adminConsole": "Admin Console"
+    "adminConsole": "Admin Console",
+    "invitation": "Invitation"
   },
   "adminNav": {
     "dashboard": "Dashboard",
@@ -129,6 +135,8 @@
     "select": "Select",
     "composite": "Composite",
     "copiedToClipboard": "Model ID copied to clipboard",
+    "feature": "Feature",
+    "allFeatures": "All Features",
     "manager": {
       "totalModels": "{{count}} models total",
       "addModel": "Add Model",
@@ -265,13 +273,25 @@
     "totalTokens": "Total Tokens",
     "totalCost": "Total Cost",
     "usageByModel": "Usage by Model",
+    "usageByDate": "Usage by Date",
     "model": "Model",
     "requests": "Requests",
     "tokens": "Tokens",
     "cost": "Cost",
     "noUsageData": "No usage data",
     "usageByEndpoint": "Usage by Endpoint",
-    "endpoint": "Endpoint"
+    "endpoint": "Endpoint",
+    "timeRange": "Time Range",
+    "last7Days": "Last 7 Days",
+    "last30Days": "Last 30 Days",
+    "last90Days": "Last 90 Days",
+    "allTime": "All Time",
+    "allModels": "All Models",
+    "allEndpoints": "All Endpoints",
+    "date": "Date",
+    "time": "Time",
+    "detailedRecords": "Detailed Records",
+    "showingFirst100": "Showing first 100 of {{total}} records"
   },
   "billing": {
     "title": "Billing & Invoices",
@@ -314,5 +334,59 @@
     "noRequests": "No requests",
     "waitingForRequests": "Waiting for requests...",
     "requestWillAppear": "Requests will appear here when API calls are made"
+  },
+  "invitation": {
+    "title": "Invitation",
+    "description": "Invite new users and manage your invitation quota",
+    "yourInviteCode": "Your Invite Code",
+    "copyCode": "Copy Code",
+    "copyLink": "Copy Invite Link",
+    "codeCopied": "Invite code copied to clipboard",
+    "linkCopied": "Invite link copied to clipboard",
+    "quotaStatus": "Quota Status",
+    "buyQuota": "Buy More",
+    "availableQuota": "Available Quota",
+    "monthlyUsed": "Monthly Used",
+    "extraQuota": "Extra Quota",
+    "totalInvited": "Total Invited",
+    "unlimited": "Unlimited",
+    "invitedUsers": "Invited Users",
+    "noInvitedUsers": "No invited users yet",
+    "username": "Username",
+    "email": "Email",
+    "invitedAt": "Invited At",
+    "quantity": "Quantity",
+    "totalCost": "Total: ${{cost}}",
+    "purchaseInfo": "Purchase additional invitation quota. $2 per invitation.",
+    "purchaseSuccess": "Successfully purchased {{count}} invitations for ${{cost}}",
+    "inviter": "Inviter",
+    "invitedBy": "Invited By",
+    "inviteCount": "Invited"
+  },
+  "notifications": {
+    "title": "Announcements",
+    "manageTitle": "Notification Management",
+    "manageDescription": "Create and manage site-wide announcements",
+    "create": "Create Notification",
+    "edit": "Edit Notification",
+    "titleLabel": "Title",
+    "contentLabel": "Content (Markdown supported)",
+    "contentHelper": "You can use Markdown syntax for formatting",
+    "pinLabel": "Pin to top",
+    "activeLabel": "Active",
+    "noNotifications": "No notifications yet",
+    "pinned": "Pinned",
+    "active": "Active",
+    "inactive": "Inactive",
+    "activate": "Activate",
+    "deactivate": "Deactivate",
+    "preview": "Preview",
+    "status": "Status",
+    "createdAt": "Created",
+    "createSuccess": "Notification created successfully",
+    "updateSuccess": "Notification updated successfully",
+    "deleteSuccess": "Notification deleted successfully",
+    "deleteConfirm": "Delete Notification",
+    "deleteConfirmMessage": "Are you sure you want to delete this notification?"
   }
 }

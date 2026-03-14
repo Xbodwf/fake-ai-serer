@@ -9,6 +9,13 @@ import {
   getUserUsageRecords,
   getAllActions,
   getAllModels,
+  getAllNotifications,
+  getNotificationById,
+  createNotification,
+  updateNotification,
+  deleteNotification,
+  loadNotifications,
+  getInvitationRecordsByInviter,
 } from '../storage.js';
 
 const router: Router = Router();
@@ -19,18 +26,32 @@ const router: Router = Router();
 router.get('/users', authMiddleware, adminMiddleware, (req: AuthRequest, res: Response) => {
   try {
     const users = getAllUsers();
+    
+    // 创建用户ID到用户名的映射
+    const userIdToName = new Map<string, string>();
+    users.forEach(u => userIdToName.set(u.id, u.username));
+    
     res.json(
-      users.map(u => ({
-        id: u.id,
-        username: u.username,
-        email: u.email,
-        balance: u.balance,
-        totalUsage: u.totalUsage,
-        role: u.role,
-        enabled: u.enabled,
-        createdAt: u.createdAt,
-        lastLoginAt: u.lastLoginAt,
-      }))
+      users.map(u => {
+        // 计算该用户邀请的人数
+        const invitationRecords = getInvitationRecordsByInviter(u.id);
+        
+        return {
+          id: u.id,
+          username: u.username,
+          email: u.email,
+          balance: u.balance,
+          totalUsage: u.totalUsage,
+          role: u.role,
+          enabled: u.enabled,
+          createdAt: u.createdAt,
+          lastLoginAt: u.lastLoginAt,
+          inviteCode: u.inviteCode,
+          invitedBy: u.invitedBy,
+          invitedByName: u.invitedBy ? userIdToName.get(u.invitedBy) || '-' : null,
+          invitationCount: invitationRecords.length,
+        };
+      })
     );
   } catch (error) {
     res.status(500).json({ error: 'Failed to get users' });
@@ -218,6 +239,95 @@ router.get('/users/:id/usage', authMiddleware, adminMiddleware, (req: AuthReques
     res.json(records);
   } catch (error) {
     res.status(500).json({ error: 'Failed to get user usage' });
+  }
+});
+
+// ==================== 通知管理 ====================
+
+/**
+ * 获取所有通知
+ */
+router.get('/notifications', authMiddleware, adminMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    await loadNotifications();
+    const notifications = getAllNotifications();
+    res.json(notifications.sort((a, b) => b.createdAt - a.createdAt));
+  } catch (error) {
+    console.error('[Get Notifications Error]', error);
+    res.status(500).json({ error: 'Failed to get notifications' });
+  }
+});
+
+/**
+ * 创建通知
+ */
+router.post('/notifications', authMiddleware, adminMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    const { title, content, isPinned } = req.body;
+
+    if (!title || !content) {
+      return res.status(400).json({ error: 'Title and content are required' });
+    }
+
+    const notification = await createNotification({
+      title,
+      content,
+      createdBy: req.userId!,
+      isPinned: isPinned || false,
+      isActive: true,
+    });
+
+    res.status(201).json(notification);
+  } catch (error) {
+    console.error('[Create Notification Error]', error);
+    res.status(500).json({ error: 'Failed to create notification' });
+  }
+});
+
+/**
+ * 更新通知
+ */
+router.put('/notifications/:id', authMiddleware, adminMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+    const { title, content, isPinned, isActive } = req.body;
+
+    const notification = getNotificationById(id);
+    if (!notification) {
+      return res.status(404).json({ error: 'Notification not found' });
+    }
+
+    const updates: any = {};
+    if (title !== undefined) updates.title = title;
+    if (content !== undefined) updates.content = content;
+    if (isPinned !== undefined) updates.isPinned = isPinned;
+    if (isActive !== undefined) updates.isActive = isActive;
+
+    const updated = await updateNotification(id, updates);
+    res.json(updated);
+  } catch (error) {
+    console.error('[Update Notification Error]', error);
+    res.status(500).json({ error: 'Failed to update notification' });
+  }
+});
+
+/**
+ * 删除通知
+ */
+router.delete('/notifications/:id', authMiddleware, adminMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+
+    const notification = getNotificationById(id);
+    if (!notification) {
+      return res.status(404).json({ error: 'Notification not found' });
+    }
+
+    await deleteNotification(id);
+    res.json({ message: 'Notification deleted' });
+  } catch (error) {
+    console.error('[Delete Notification Error]', error);
+    res.status(500).json({ error: 'Failed to delete notification' });
   }
 });
 
