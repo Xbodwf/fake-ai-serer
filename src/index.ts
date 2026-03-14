@@ -60,7 +60,8 @@ const app: Application = express();
 const server = createServer(app);
 
 // 中间件
-app.use(express.json());
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // CORS
 app.use((req, res, next) => {
@@ -1355,7 +1356,7 @@ app.use((req: Request, res: Response) => {
   // 否则返回前端页面（如果存在）
   const indexPath = join(distPath, 'index.html');
   if (existsSync(indexPath)) {
-    res.sendFile(indexPath);
+    res.sendFile(indexPath, { root: '/' });
   } else {
     // 开发模式下，返回提示信息
     res.status(200).send(`
