@@ -34,6 +34,7 @@ import {
 } from '@mui/icons-material';
 import { useAuth } from '../contexts/AuthContext';
 import api from '../utils/api';
+import { copyToClipboard } from '../utils/clipboard';
 
 interface InvitationInfo {
   inviteCode: string;
@@ -85,16 +86,18 @@ export function UserInvitationPage() {
 
   const handleCopyInviteCode = () => {
     if (invitationInfo?.inviteCode) {
-      navigator.clipboard.writeText(invitationInfo.inviteCode);
-      setSnackbar({ open: true, message: t('invitation.codeCopied') });
+      copyToClipboard(invitationInfo.inviteCode)
+        .then(() => setSnackbar({ open: true, message: t('invitation.codeCopied') }))
+        .catch(() => setError('Failed to copy'));
     }
   };
 
   const handleCopyInviteLink = () => {
     if (invitationInfo?.inviteCode) {
       const link = `${window.location.origin}/register?invite=${invitationInfo.inviteCode}`;
-      navigator.clipboard.writeText(link);
-      setSnackbar({ open: true, message: t('invitation.linkCopied') });
+      copyToClipboard(link)
+        .then(() => setSnackbar({ open: true, message: t('invitation.linkCopied') }))
+        .catch(() => setError('Failed to copy'));
     }
   };
 

@@ -28,6 +28,7 @@ import {
 import { Edit2, Trash2, FileText, Copy, UserPlus } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { LoadingSpinner } from '../components/LoadingSpinner';
+import { copyToClipboard } from '../utils/clipboard';
 import axios from 'axios';
 
 interface AdminUser {
@@ -122,29 +123,6 @@ export function AdminUsersPage() {
   };
 
   const copyInviteCode = (code: string) => {
-    // 支持 HTTPS 和非 HTTPS 环境
-    const copyToClipboard = (text: string) => {
-      if (navigator.clipboard && window.isSecureContext) {
-        return navigator.clipboard.writeText(text);
-      }
-      return new Promise<void>((resolve, reject) => {
-        const textArea = document.createElement('textarea');
-        textArea.value = text;
-        textArea.style.position = 'fixed';
-        textArea.style.left = '-999999px';
-        document.body.appendChild(textArea);
-        textArea.select();
-        try {
-          document.execCommand('copy');
-          document.body.removeChild(textArea);
-          resolve();
-        } catch (err) {
-          document.body.removeChild(textArea);
-          reject(err);
-        }
-      });
-    };
-
     copyToClipboard(code)
       .then(() => setSnackbar(t('invitation.codeCopied')))
       .catch(() => {});

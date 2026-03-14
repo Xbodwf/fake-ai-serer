@@ -25,6 +25,7 @@ import {
 import { Key, Plus, Trash2, Copy, Calendar, Clock, Eye, Edit2 } from 'lucide-react';
 import { useServer } from '../contexts/ServerContext';
 import { ApiKeyEditDialog } from './ApiKeyEditDialog';
+import { copyToClipboard as copyText } from '../utils/clipboard';
 import type { ApiKey } from '../types';
 import axios from 'axios';
 
@@ -117,8 +118,9 @@ export default function ApiKeyManager() {
   };
 
   const copyToClipboard = (text: string) => {
-    navigator.clipboard.writeText(text);
-    setSnackbar('已复制到剪贴板');
+    copyText(text)
+      .then(() => setSnackbar('已复制到剪贴板'))
+      .catch(() => setSnackbar('复制失败'));
   };
 
   const formatDate = (timestamp: number) => {

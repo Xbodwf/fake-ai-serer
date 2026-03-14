@@ -22,10 +22,12 @@ import {
   Alert,
   IconButton,
   Chip,
+  Snackbar,
 } from '@mui/material';
 import { Copy, Trash2, Plus } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { LoadingSpinner } from '../components/LoadingSpinner';
+import { copyToClipboard } from '../utils/clipboard';
 import axios from 'axios';
 import type { ApiKey } from '../../types.js';
 
@@ -36,6 +38,7 @@ export function UserApiKeysPage() {
   const [apiKeys, setApiKeys] = useState<ApiKey[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [newKeyName, setNewKeyName] = useState('');
   const [createdKey, setCreatedKey] = useState<string | null>(null);
@@ -97,8 +100,10 @@ export function UserApiKeysPage() {
     }
   };
 
-  const copyToClipboard = (text: string) => {
-    navigator.clipboard.writeText(text);
+  const handleCopy = (text: string) => {
+    copyToClipboard(text)
+      .then(() => setSuccess(t('apiKeys.copyToClipboard')))
+      .catch(() => setError(t('errors.failedToCopy')));
   };
 
   if (loading) {
@@ -145,7 +150,7 @@ export function UserApiKeysPage() {
             </Box>
             <IconButton
               size="small"
-              onClick={() => copyToClipboard(createdKey)}
+              onClick={() => handleCopy(createdKey)}
               title={t('apiKeys.copyToClipboard')}
             >
               <Copy size={20} />
@@ -233,6 +238,18 @@ export function UserApiKeysPage() {
           </Button>
         </DialogActions>
       </Dialog>
+
+      {/* 成功提示 */}
+      <Snackbar
+        open={!!success}
+        autoHideDuration={3000}
+        onClose={() => setSuccess('')}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      >
+        <Alert severity="success" onClose={() => setSuccess('')}>
+          {success}
+        </Alert>
+      </Snackbar>
     </Container>
   );
 }

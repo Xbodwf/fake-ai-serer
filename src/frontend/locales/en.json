@@ -327,7 +327,8 @@
     "failedToCreate": "Failed to create",
     "failedToUpdate": "Failed to update",
     "failedToDelete": "Failed to delete",
-    "confirmDelete": "Are you sure you want to delete this?"
+    "confirmDelete": "Are you sure you want to delete this?",
+    "failedToCopy": "Failed to copy to clipboard"
   },
   "requests": {
     "description": "Simulate AI responses and handle API requests",

@@ -329,7 +329,8 @@
     "failedToCreate": "创建失败",
     "failedToUpdate": "更新失败",
     "failedToDelete": "删除失败",
-    "confirmDelete": "确定要删除吗？"
+    "confirmDelete": "确定要删除吗？",
+    "failedToCopy": "复制到剪贴板失败"
   },
   "requests": {
     "description": "模拟 AI 回复，处理来自 API 的请求",

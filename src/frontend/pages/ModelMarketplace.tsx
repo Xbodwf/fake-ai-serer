@@ -21,6 +21,7 @@ import {
 } from '@mui/material';
 import { Search, X } from 'lucide-react';
 import { ModelCard } from '../components/ModelCard';
+import { copyToClipboard } from '../utils/clipboard';
 import type { Model } from '../../types.js';
 import { useTranslation } from 'react-i18next';
 
@@ -109,37 +110,6 @@ export function ModelMarketplace({ models, onSelectModel }: ModelMarketplaceProp
   };
 
   const handleSelect = (model: Model) => {
-    // 复制模型 ID 到剪贴板
-    const copyToClipboard = (text: string) => {
-      // 优先使用现代 API
-      if (navigator.clipboard && window.isSecureContext) {
-        return navigator.clipboard.writeText(text);
-      }
-      // Fallback 到 document.execCommand (非 HTTPS 环境)
-      return new Promise<void>((resolve, reject) => {
-        const textArea = document.createElement('textarea');
-        textArea.value = text;
-        textArea.style.position = 'fixed';
-        textArea.style.left = '-999999px';
-        textArea.style.top = '-999999px';
-        document.body.appendChild(textArea);
-        textArea.focus();
-        textArea.select();
-        try {
-          const successful = document.execCommand('copy');
-          document.body.removeChild(textArea);
-          if (successful) {
-            resolve();
-          } else {
-            reject(new Error('Copy failed'));
-          }
-        } catch (err) {
-          document.body.removeChild(textArea);
-          reject(err);
-        }
-      });
-    };
-
     copyToClipboard(model.id)
       .then(() => setSnackbarOpen(true))
       .catch(() => console.warn('Failed to copy to clipboard'));
