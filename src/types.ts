@@ -79,6 +79,7 @@ export interface Model {
     unit?: 'K' | 'M'; // 价格单位（K=千，M=百万）
     type?: 'token' | 'request'; // 计费类型：按 token 或按请求
     perRequest?: number; // 按请求计费时的单价（美元）
+    cacheRead?: number; // 缓存读取价格（美元）
   };
   api_key?: string; // 模型关联的API密钥（用于转发）
   api_base_url?: string; // API基础URL（用于转发）

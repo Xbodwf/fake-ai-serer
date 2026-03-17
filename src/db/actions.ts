@@ -1,0 +1,130 @@
+import { toEntity, toEntities } from './utils';
+import { getDB } from './connection';
+import { Action } from '../types';
+import { ObjectId } from 'mongodb';
+
+const COLLECTION_NAME = 'actions';
+
+export async function createAction(action: Omit<Action, 'id'> & { _id?: ObjectId }): Promise<Action> {
+  const db = getDB();
+  const collection = db.collection(COLLECTION_NAME);
+
+  const doc = {
+    ...action,
+    _id: action._id || new ObjectId(),
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  };
+
+  await collection.insertOne(doc);
+  return {
+    ...doc,
+    id: doc._id.toString(),
+  } as unknown as Action;
+}
+
+export async function getAction(id: string): Promise<Action | null> {
+  const db = getDB();
+  const collection = db.collection(COLLECTION_NAME);
+
+  const doc = await collection.findOne({ _id: new ObjectId(id) });
+  if (!doc) return null;
+
+  return {
+    ...doc,
+    id: doc._id.toString(),
+  } as unknown as Action;
+}
+
+export async function getActionsByUser(userId: string): Promise<Action[]> {
+  const db = getDB();
+  const collection = db.collection(COLLECTION_NAME);
+
+  const docs = await collection.find({ createdBy: userId }).sort({ createdAt: -1 }).toArray();
+  return docs.map(doc => ({
+    ...doc,
+    id: doc._id.toString(),
+  })) as Action[];
+}
+
+export async function getPublicActions(): Promise<Action[]> {
+  const db = getDB();
+  const collection = db.collection(COLLECTION_NAME);
+
+  const docs = await collection.find({ isPublic: true }).sort({ createdAt: -1 }).toArray();
+  return docs.map(doc => ({
+    ...doc,
+    id: doc._id.toString(),
+  })) as Action[];
+}
+
+export async function getAllActions(): Promise<Action[]> {
+  const db = getDB();
+  const collection = db.collection(COLLECTION_NAME);
+
+  const docs = await collection.find({}).sort({ createdAt: -1 }).toArray();
+  return docs.map(doc => ({
+    ...doc,
+    id: doc._id.toString(),
+  })) as Action[];
+}
+
+export async function updateAction(id: string, updates: Partial<Action>): Promise<Action | null> {
+  const db = getDB();
+  const collection = db.collection(COLLECTION_NAME);
+
+  const result = await collection.findOneAndUpdate(
+    { _id: new ObjectId(id) },
+    {
+      $set: {
+        ...updates,
+        updatedAt: new Date(),
+      },
+    },
+    { returnDocument: 'after' }
+  );
+
+  if (!result.value) return null;
+
+  return {
+    ...result.value,
+    id: result.value._id.toString(),
+  } as unknown as Action;
+}
+
+export async function deleteAction(id: string): Promise<boolean> {
+  const db = getDB();
+  const collection = db.collection(COLLECTION_NAME);
+
+  const result = await collection.deleteOne({ _id: new ObjectId(id) });
+  return result.deletedCount > 0;
+}
+
+export async function searchActions(query: {
+  tags?: string[];
+  category?: string;
+  isPublic?: boolean;
+}): Promise<Action[]> {
+  const db = getDB();
+  const collection = db.collection(COLLECTION_NAME);
+
+  const filter: any = {};
+
+  if (query.tags && query.tags.length > 0) {
+    filter.tags = { $in: query.tags };
+  }
+
+  if (query.category) {
+    filter.category = query.category;
+  }
+
+  if (query.isPublic !== undefined) {
+    filter.isPublic = query.isPublic;
+  }
+
+  const docs = await collection.find(filter).sort({ createdAt: -1 }).toArray();
+  return docs.map(doc => ({
+    ...doc,
+    id: doc._id.toString(),
+  })) as Action[];
+}
