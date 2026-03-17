@@ -12,7 +12,8 @@
     "build:backend": "tsc -b",
     "build:frontend": "vite build",
     "start": "node dist/index.js",
-    "lint": "eslint src/frontend"
+    "lint": "eslint src/frontend",
+    "migrate": "tsx src/scripts/migrate.ts"
   },
   "keywords": [
     "openai",
