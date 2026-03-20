@@ -101,6 +101,7 @@ async function migrateModels(db: any) {
 
     // 转换模型数据
     const modelsData = config.models.map((model: any, index: number) => ({
+      _id: new ObjectId(),
       id: model.id,
       object: 'model',
       created: Math.floor(Date.now() / 1000) + index,

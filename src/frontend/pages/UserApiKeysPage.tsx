@@ -84,17 +84,22 @@ export function UserApiKeysPage() {
     }
 
     try {
+      setError(''); // 清除之前的错误
       const response = await axios.post(
         '/api/user/api-keys',
         { name: newKeyName },
         { headers: { Authorization: `Bearer ${token}` } }
       );
 
-      setCreatedKey(response.data.key.key); // 获取实际的 key 字符串
+      if (response.data?.key?.key) {
+        setCreatedKey(response.data.key.key);
+      }
       setNewKeyName('');
       setShowCreateDialog(false);
       await fetchApiKeys();
+      setSuccess(t('apiKeys.keyCreatedSuccessfully'));
     } catch (err: any) {
+      console.error('Failed to create API key:', err);
       setError(err.response?.data?.error || t('apiKeys.failedToCreate'));
     }
   };
@@ -130,6 +135,7 @@ export function UserApiKeysPage() {
     if (!selectedKey) return;
 
     try {
+      setError(''); // 清除之前的错误
       await axios.put(
         `/api/user/api-keys/${selectedKey.id}`,
         {
@@ -140,9 +146,11 @@ export function UserApiKeysPage() {
         { headers: { Authorization: `Bearer ${token}` } }
       );
       setShowEditDialog(false);
+      setSelectedKey(null);
       setSuccess(t('apiKeys.updateSuccess'));
       await fetchApiKeys();
     } catch (err: any) {
+      console.error('Failed to update API key:', err);
       setError(err.response?.data?.error || t('apiKeys.failedToUpdate'));
     }
   };
@@ -269,7 +277,16 @@ export function UserApiKeysPage() {
       </Card>
 
       {/* 创建 API Key 对话框 */}
-      <Dialog open={showCreateDialog} onClose={() => setShowCreateDialog(false)} maxWidth="sm" fullWidth>
+      <Dialog
+        open={showCreateDialog}
+        onClose={() => {
+          setShowCreateDialog(false);
+          setNewKeyName('');
+          setError('');
+        }}
+        maxWidth="sm"
+        fullWidth
+      >
         <DialogTitle>{t('apiKeys.createNewKey')}</DialogTitle>
         <DialogContent>
           <TextField
@@ -290,7 +307,16 @@ export function UserApiKeysPage() {
       </Dialog>
 
       {/* 编辑 API Key 对话框 */}
-      <Dialog open={showEditDialog} onClose={() => setShowEditDialog(false)} maxWidth="sm" fullWidth>
+      <Dialog
+        open={showEditDialog}
+        onClose={() => {
+          setShowEditDialog(false);
+          setSelectedKey(null);
+          setError('');
+        }}
+        maxWidth="sm"
+        fullWidth
+      >
         <DialogTitle>{t('apiKeys.editKey')}</DialogTitle>
         <DialogContent>
           <Stack spacing={2} sx={{ mt: 2 }}>

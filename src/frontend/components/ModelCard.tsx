@@ -45,25 +45,63 @@ export function ModelCard({ model, onSelect, onPreview }: ModelCardProps) {
       }}
     >
       <CardContent sx={{ flex: 1 }}>
-        {/* 模型名称和标签 */}
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', mb: 1 }}>
-          <Box>
-            <Typography variant="h6" sx={{ fontWeight: 600 }}>
-              {model.id}
-            </Typography>
-            <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-              {t('models.by')} {model.owned_by}
-            </Typography>
-          </Box>
-          {model.isComposite && (
-            <Chip
-              icon={<Zap size={14} />}
-              label={t('models.composite')}
-              size="small"
-              color="primary"
-              variant="outlined"
+        {/* 模型图标和名称 */}
+        <Box sx={{ display: 'flex', gap: 2, alignItems: 'flex-start', mb: 2 }}>
+          {model.icon ? (
+            <Box
+              component="img"
+              src={model.icon}
+              alt={model.id}
+              sx={{
+                width: 48,
+                height: 48,
+                borderRadius: 1,
+                backgroundColor: '#ffffff',
+                padding: 0.5,
+                flexShrink: 0,
+                objectFit: 'contain',
+              }}
             />
+          ) : (
+            <Box
+              sx={{
+                width: 48,
+                height: 48,
+                borderRadius: 1,
+                backgroundColor: '#f5f5f5',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexShrink: 0,
+                color: 'text.secondary',
+                fontSize: '0.75rem',
+                fontWeight: 600,
+              }}
+            >
+              {model.id.substring(0, 2).toUpperCase()}
+            </Box>
           )}
+          <Box sx={{ flex: 1 }}>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start' }}>
+              <Box>
+                <Typography variant="h6" sx={{ fontWeight: 600 }}>
+                  {model.id}
+                </Typography>
+                <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+                  {t('models.by')} {model.owned_by}
+                </Typography>
+              </Box>
+              {model.isComposite && (
+                <Chip
+                  icon={<Zap size={14} />}
+                  label={t('models.composite')}
+                  size="small"
+                  color="primary"
+                  variant="outlined"
+                />
+              )}
+            </Box>
+          </Box>
         </Box>
 
         {/* 描述 */}

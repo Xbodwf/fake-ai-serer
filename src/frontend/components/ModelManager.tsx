@@ -35,6 +35,8 @@ import {
   InputLabel,
   Avatar,
   CircularProgress,
+  FormControlLabel,
+  Switch,
 } from '@mui/material';
 import {
   Plus,
@@ -1122,12 +1124,12 @@ export default function ModelManager() {
                 placeholder={t('models.manager.forwardModelNamePlaceholder', '留空则使用原模型名称')}
                 helperText={t('models.manager.forwardModelNameHelper', '不同平台的模型名称可能不同，可在此指定转发时使用的模型名称')}
               />
-              
+
               <FormControlLabel
                 control={
                   <Switch
                     checked={formData.allowManualReply}
-                    onChange={(e) => setFormData({ ...formData, allowManualReply: e.target.checked })}
+                    onChange={(e: any) => setFormData({ ...formData, allowManualReply: e.target.checked })}
                   />
                 }
                 label={t('models.manager.allowManualReply', '允许人工回复')}

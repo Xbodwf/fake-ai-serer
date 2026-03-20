@@ -9,6 +9,10 @@ import {
   getUserUsageRecords,
   getAllActions,
   getAllModels,
+  getModel,
+  addModel,
+  updateModel,
+  deleteModel,
   getAllNotifications,
   getNotificationById,
   createNotification,
@@ -369,6 +373,121 @@ router.delete('/notifications/:id', authMiddleware, adminMiddleware, async (req:
   } catch (error) {
     console.error('[Delete Notification Error]', error);
     res.status(500).json({ error: 'Failed to delete notification' });
+  }
+});
+
+/**
+ * 获取所有模型
+ */
+router.get('/models', authMiddleware, adminMiddleware, (req: AuthRequest, res: Response) => {
+  try {
+    const models = getAllModels();
+    res.json({ models });
+  } catch (error) {
+    console.error('[Get Models Error]', error);
+    res.status(500).json({ error: 'Failed to get models' });
+  }
+});
+
+/**
+ * 获取单个模型
+ */
+router.get('/models/:id', authMiddleware, adminMiddleware, (req: AuthRequest, res: Response) => {
+  try {
+    const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+    // 处理模型名称中包含"/"的情况
+    const decodedId = decodeURIComponent(id);
+    const model = getModel(decodedId);
+
+    if (!model) {
+      return res.status(404).json({ error: 'Model not found' });
+    }
+
+    res.json(model);
+  } catch (error) {
+    console.error('[Get Model Error]', error);
+    res.status(500).json({ error: 'Failed to get model' });
+  }
+});
+
+/**
+ * 创建模型
+ */
+router.post('/models', authMiddleware, adminMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    const { id, description, owned_by, category, pricing, supported_features, icon } = req.body;
+
+    if (!id) {
+      return res.status(400).json({ error: 'Model ID is required' });
+    }
+
+    const newModel = await addModel({
+      id,
+      description,
+      owned_by,
+      category,
+      pricing,
+      supported_features,
+      icon,
+    });
+
+    res.status(201).json(newModel);
+  } catch (error) {
+    console.error('[Create Model Error]', error);
+    res.status(500).json({ error: 'Failed to create model' });
+  }
+});
+
+/**
+ * 更新模型
+ */
+router.put('/models/:id', authMiddleware, adminMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+    // 处理模型名称中包含"/"的情况
+    const decodedId = decodeURIComponent(id);
+    const updates = req.body;
+
+    const model = getModel(decodedId);
+    if (!model) {
+      return res.status(404).json({ error: 'Model not found' });
+    }
+
+    const updated = await updateModel(decodedId, updates);
+    if (!updated) {
+      return res.status(500).json({ error: 'Failed to update model' });
+    }
+
+    res.json(updated);
+  } catch (error) {
+    console.error('[Update Model Error]', error);
+    res.status(500).json({ error: 'Failed to update model' });
+  }
+});
+
+/**
+ * 删除模型
+ */
+router.delete('/models/:id', authMiddleware, adminMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+    // 处理模型名称中包含"/"的情况
+    const decodedId = decodeURIComponent(id);
+
+    const model = getModel(decodedId);
+    if (!model) {
+      return res.status(404).json({ error: 'Model not found' });
+    }
+
+    const deleted = await deleteModel(decodedId);
+    if (!deleted) {
+      return res.status(500).json({ error: 'Failed to delete model' });
+    }
+
+    res.json({ message: 'Model deleted successfully' });
+  } catch (error) {
+    console.error('[Delete Model Error]', error);
+    res.status(500).json({ error: 'Failed to delete model' });
   }
 });
 
