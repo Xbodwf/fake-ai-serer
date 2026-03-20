@@ -1223,16 +1223,32 @@ app.post('/v1/messages', async (req: Request, res: Response) => {
 // 所有 /v1beta/* 路由应用 API Key 认证中间件
 app.use('/v1beta', apiKeyAuthMiddleware);
 
-// POST /v1beta/models/:modelId:generateContent - Gemini generateContent
-app.post('/v1beta/models/:modelId:generateContent', async (req: Request, res: Response) => {
-  const modelId = (req.params.modelId as string).replace(':', '');
-  return handleGeminiRequest(req, res, modelId, false);
-});
+// 辅助函数：从 Gemini 路径解析模型 ID 和操作类型
+// Gemini API 路径格式: /v1beta/models/{modelId}:generateContent 或 :streamGenerateContent
+function parseGeminiModelPath(path: string): { modelId: string; action: string } | null {
+  // 匹配 /v1beta/models/{modelId}:{action}
+  const match = path.match(/\/v1beta\/models\/(.+):(generateContent|streamGenerateContent)$/);
+  if (match) {
+    return { modelId: decodeURIComponent(match[1]), action: match[2] };
+  }
+  return null;
+}
 
-// POST /v1beta/models/:modelId:streamGenerateContent - Gemini streamGenerateContent
-app.post('/v1beta/models/:modelId:streamGenerateContent', async (req: Request, res: Response) => {
-  const modelId = (req.params.modelId as string).replace(':', '');
-  return handleGeminiRequest(req, res, modelId, true);
+// POST /v1beta/models/* - Gemini generateContent 和 streamGenerateContent
+// 使用通配符路由支持模型 ID 包含特殊字符（如斜杠）
+app.post('/v1beta/models/*', async (req: Request, res: Response) => {
+  const path = req.originalUrl.split('?')[0]; // 移除查询参数
+  const parsed = parseGeminiModelPath(path);
+
+  if (!parsed) {
+    return res.status(400).json({
+      error: { code: 400, message: 'Invalid Gemini API path format', status: 'BAD_REQUEST' }
+    });
+  }
+
+  const { modelId, action } = parsed;
+  const isStream = action === 'streamGenerateContent';
+  return handleGeminiRequest(req, res, modelId, isStream);
 });
 
 // GET /v1beta/models - Gemini models list (包括 Actions)
@@ -1261,9 +1277,9 @@ app.get('/v1beta/models', (req: Request, res: Response) => {
   res.json({ models: [...models, ...actionModels] });
 });
 
-// GET /v1beta/models/:modelId - Gemini model info
-app.get('/v1beta/models/:modelId', (req: Request, res: Response) => {
-  const modelId = req.params.modelId as string;
+// GET /v1beta/models/:modelId(*) - Gemini model info (支持模型ID包含斜杠)
+app.get('/v1beta/models/:modelId(*)', (req: Request, res: Response) => {
+  const modelId = decodeURIComponent(req.params.modelId as string);
   const model = getModel(modelId);
 
   if (!model) {
