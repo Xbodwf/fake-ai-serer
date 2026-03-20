@@ -242,8 +242,11 @@ export async function validateApiKey(key: string): Promise<ApiKey | null> {
   if (apiKey.expiresAt && apiKey.expiresAt < Date.now()) {
     return null;
   }
-  
+
   // 检查用户是否存在且启用
+  if (!apiKey.userId) {
+    return null; // API key 没有关联用户
+  }
   const user = getUserById(apiKey.userId);
   if (!user) {
     // 用户不存在，删除孤儿 API key
