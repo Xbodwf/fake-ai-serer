@@ -15,6 +15,13 @@ import {
   TableRow,
   Chip,
   Alert,
+  Button,
+  TextField,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  CircularProgress,
 } from '@mui/material';
 import { useAuth } from '../contexts/AuthContext';
 import { LoadingSpinner } from '../components/LoadingSpinner';
@@ -34,6 +41,15 @@ export function UserBillingPage() {
   const [billingInfo, setBillingInfo] = useState<BillingInfo | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [redeemDialogOpen, setRedeemDialogOpen] = useState(false);
+  const [redeemCode, setRedeemCode] = useState('');
+  const [redeemLoading, setRedeemLoading] = useState(false);
+  const [redeemError, setRedeemError] = useState('');
+  const [redeemSuccess, setRedeemSuccess] = useState('');
+  const [chargeDialogOpen, setChargeDialogOpen] = useState(false);
+  const [chargeAmount, setChargeAmount] = useState('');
+  const [chargeType, setChargeType] = useState('alipay');
+  const [chargeLoading, setChargeLoading] = useState(false);
 
   useEffect(() => {
     if (!user || !token) {
@@ -54,6 +70,65 @@ export function UserBillingPage() {
       setError(err.response?.data?.error || 'Failed to load billing info');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleRedeemCode = async () => {
+    if (!redeemCode.trim()) {
+      setRedeemError('Please enter a redemption code');
+      return;
+    }
+
+    setRedeemLoading(true);
+    setRedeemError('');
+    setRedeemSuccess('');
+
+    try {
+      const response = await axios.post(
+        '/api/payment/redeem',
+        { code: redeemCode },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+
+      setRedeemSuccess(`Successfully redeemed! Added ${formatCurrency(response.data.amount)}`);
+      setRedeemCode('');
+      fetchBillingInfo();
+      setTimeout(() => setRedeemDialogOpen(false), 1500);
+    } catch (err: any) {
+      setRedeemError(err.response?.data?.error || 'Failed to redeem code');
+    } finally {
+      setRedeemLoading(false);
+    }
+  };
+
+  const handleCharge = async () => {
+    if (!chargeAmount || parseFloat(chargeAmount) <= 0) {
+      return;
+    }
+
+    setChargeLoading(true);
+
+    try {
+      const response = await axios.post(
+        '/api/payment/create',
+        {
+          type: chargeType,
+          name: `Charge ${chargeAmount}`,
+          money: parseFloat(chargeAmount),
+        },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+
+      if (response.data.payUrl) {
+        window.location.href = response.data.payUrl;
+      } else if (response.data.qrCode) {
+        // 显示二维码
+        alert('Please scan the QR code to complete payment');
+      }
+    } catch (err: any) {
+      alert(err.response?.data?.msg || 'Failed to create payment order');
+    } finally {
+      setChargeLoading(false);
     }
   };
 
@@ -106,6 +181,24 @@ export function UserBillingPage() {
             </Typography>
           </CardContent>
         </Card>
+      </Box>
+
+      {/* 充值和兑换码按钮 */}
+      <Box sx={{ display: 'flex', gap: 2, mb: 4 }}>
+        <Button
+          variant="contained"
+          color="primary"
+          onClick={() => setChargeDialogOpen(true)}
+        >
+          Charge Balance
+        </Button>
+        <Button
+          variant="outlined"
+          color="primary"
+          onClick={() => setRedeemDialogOpen(true)}
+        >
+          Redeem Code
+        </Button>
       </Box>
 
       {/* 发票列表 */}
@@ -180,6 +273,78 @@ export function UserBillingPage() {
           </Typography>
         </CardContent>
       </Card>
+
+      {/* 兑换码对话框 */}
+      <Dialog open={redeemDialogOpen} onClose={() => setRedeemDialogOpen(false)} maxWidth="sm" fullWidth>
+      <DialogTitle>Redeem Code</DialogTitle>
+      <DialogContent sx={{ pt: 2 }}>
+        {redeemError && <Alert severity="error" sx={{ mb: 2 }}>{redeemError}</Alert>}
+        {redeemSuccess && <Alert severity="success" sx={{ mb: 2 }}>{redeemSuccess}</Alert>}
+        <TextField
+          fullWidth
+          label="Redemption Code"
+          value={redeemCode}
+          onChange={(e) => setRedeemCode(e.target.value)}
+          disabled={redeemLoading}
+          placeholder="Enter your redemption code"
+        />
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={() => setRedeemDialogOpen(false)} disabled={redeemLoading}>
+          Cancel
+        </Button>
+        <Button
+          onClick={handleRedeemCode}
+          variant="contained"
+          disabled={redeemLoading || !redeemCode.trim()}
+        >
+          {redeemLoading ? <CircularProgress size={24} /> : 'Redeem'}
+        </Button>
+      </DialogActions>
+    </Dialog>
+
+    {/* 充值对话框 */}
+    <Dialog open={chargeDialogOpen} onClose={() => setChargeDialogOpen(false)} maxWidth="sm" fullWidth>
+      <DialogTitle>Charge Balance</DialogTitle>
+      <DialogContent sx={{ pt: 2 }}>
+        <TextField
+          fullWidth
+          label="Amount"
+          type="number"
+          value={chargeAmount}
+          onChange={(e) => setChargeAmount(e.target.value)}
+          disabled={chargeLoading}
+          inputProps={{ step: '0.01', min: '0.01' }}
+          sx={{ mb: 2 }}
+        />
+        <TextField
+          fullWidth
+          select
+          label="Payment Method"
+          value={chargeType}
+          onChange={(e) => setChargeType(e.target.value)}
+          disabled={chargeLoading}
+          SelectProps={{
+            native: true,
+          }}
+        >
+          <option value="alipay">Alipay</option>
+          <option value="wxpay">WeChat Pay</option>
+        </TextField>
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={() => setChargeDialogOpen(false)} disabled={chargeLoading}>
+          Cancel
+        </Button>
+        <Button
+          onClick={handleCharge}
+          variant="contained"
+          disabled={chargeLoading || !chargeAmount || parseFloat(chargeAmount) <= 0}
+        >
+          {chargeLoading ? <CircularProgress size={24} /> : 'Proceed to Payment'}
+        </Button>
+      </DialogActions>
+    </Dialog>
     </Container>
   );
 }

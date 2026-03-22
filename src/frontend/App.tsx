@@ -26,6 +26,7 @@ import { AdminUsersPage } from './pages/AdminUsersPage';
 import { AdminUserRequestsPage } from './pages/AdminUserRequestsPage';
 import { AdminSettingsPage } from './pages/AdminSettingsPage';
 import { AdminNotificationsPage } from './pages/AdminNotificationsPage';
+import { AdminRedeemCodesPage } from './pages/AdminRedeemCodesPage';
 import { ModelMarketplace } from './pages/ModelMarketplace';
 import ModelManager from './components/ModelManager';
 import { NotFoundPage } from './pages/NotFoundPage';
@@ -334,6 +335,16 @@ function AppContent() {
                 <ProtectedRoute requiredRole="admin">
                   <AdminLayout>
                     <AdminNotificationsPage />
+                  </AdminLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/console/redeem-codes"
+              element={
+                <ProtectedRoute requiredRole="admin">
+                  <AdminLayout>
+                    <AdminRedeemCodesPage />
                   </AdminLayout>
                 </ProtectedRoute>
               }
