@@ -1,10 +1,13 @@
+// 加载环境变量（必须在所有导入之前）
+import { config as dotenvConfig } from 'dotenv';
+dotenvConfig();
+
 import express, { Request, Response, Application } from 'express';
 import type { Message } from './types.js';
 import { initWebSocket, getConnectedClientsCount, broadcastModelsUpdate } from './websocket.js';
 import { createServer } from 'http';
 import { existsSync, mkdirSync } from 'fs';
 import { join } from 'path';
-import { config as dotenvConfig } from 'dotenv';
 import { formatEndpointsForConsole } from './apiEndpoints.js';
 import {
   initializeDatabase,
@@ -38,9 +41,6 @@ import { tcpClientManager } from './tcpClient.js';
 import { initializePaymentSystem } from './payment/initialize.js';
 import { createPaymentRoutes } from './routes/payment.js';
 import { createAdminPaymentRoutes } from './routes/adminPayment.js';
-
-// 加载环境变量
-dotenvConfig();
 
 // 辅助函数：获取消息内容的字符串表示（供各路由模块使用）
 export function getContentString(content: Message['content']): string {
