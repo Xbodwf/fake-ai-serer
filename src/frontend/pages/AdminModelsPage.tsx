@@ -323,8 +323,10 @@ export function AdminModelsPage() {
               placeholder="/static/models/icon.png"
             />
             <FormControl fullWidth size="small">
-              <InputLabel>{t('models.category')}</InputLabel>
+              <InputLabel id="model-type-label">{t('models.category')}</InputLabel>
               <Select
+                labelId="model-type-label"
+                id="model-type-select"
                 value={formData.type || 'text'}
                 onChange={(e) => setFormData({ ...formData, type: e.target.value as any })}
                 label={t('models.category')}
