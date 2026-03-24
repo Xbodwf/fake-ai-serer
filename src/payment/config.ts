@@ -7,6 +7,11 @@
 
 import type { PaymentModuleConfig } from './types.js';
 
+console.log('[Payment Config] Loading config...');
+console.log('[Payment Config] PAYMENT_EPAY_ENABLED:', process.env.PAYMENT_EPAY_ENABLED);
+console.log('[Payment Config] PAYMENT_EPAY_PID:', process.env.PAYMENT_EPAY_PID);
+console.log('[Payment Config] PAYMENT_EPAY_KEY:', process.env.PAYMENT_EPAY_KEY ? '(set)' : '(not set)');
+
 /**
  * 易支付模块配置示例
  */

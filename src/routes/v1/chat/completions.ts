@@ -3,6 +3,7 @@ import type { ChatCompletionRequest, PendingRequest } from '../../../types.js';
 import { addPendingRequest, removePendingRequest } from '../../../requestStore.js';
 import { buildResponse, buildStreamChunk, buildStreamDone, generateRequestId } from '../../../responseBuilder.js';
 import { broadcastRequest, getConnectedClientsCount } from '../../../websocket.js';
+import { hasReverseClients, broadcastRequestToReverseClients } from '../../../reverseWebSocket.js';
 import { getModel, validateApiKey, getUserById, updateUser, createUsageRecord, getAllModels, getActionByName, getAllApiKeys } from '../../../storage.js';
 import { calculateCost, calculateTokens } from '../../../billing.js';
 import { executeAction } from '../../../actions/executor.js';
@@ -345,7 +346,20 @@ async function handleChatRequest(
       });
 
       addPendingRequest(pending);
-      broadcastRequest(pending);
+      
+      // 优先使用反向 WebSocket 客户端
+      if (hasReverseClients()) {
+        const sentCount = broadcastRequestToReverseClients(pending);
+        if (sentCount > 0) {
+          console.log(`[Reverse WS] 请求 ${requestId} 已发送到 ${sentCount} 个反向客户端`);
+        } else {
+          // 如果没有反向客户端可用，回退到普通广播
+          broadcastRequest(pending);
+        }
+      } else {
+        // 没有反向客户端，使用普通广播
+        broadcastRequest(pending);
+      }
 
       const forwardPromise = forwardChatRequest(model, body);
 

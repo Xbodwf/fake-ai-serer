@@ -2,9 +2,10 @@
 import { config as dotenvConfig } from 'dotenv';
 dotenvConfig();
 
-import express, { Request, Response, Application } from 'express';
+import express, { Request, Response, Application, NextFunction } from 'express';
 import type { Message } from './types.js';
 import { initWebSocket, getConnectedClientsCount, broadcastModelsUpdate } from './websocket.js';
+import { initReverseWebSocket, hasReverseClients, broadcastRequestToReverseClients } from './reverseWebSocket.js';
 import { createServer } from 'http';
 import { existsSync, mkdirSync } from 'fs';
 import { join } from 'path';
@@ -35,7 +36,7 @@ import openaiRoutes from './routes/openai.js';
 import apiRoutes from './routes/api/index.js';
 import v1Routes from './routes/v1/index.js';
 import v1betaRoutes from './routes/v1beta/index.js';
-import { authMiddleware, adminMiddleware, errorHandler } from './middleware.js';
+import { authMiddleware, adminMiddleware, errorHandler, AuthRequest } from './middleware.js';
 import { startTCPServer } from './tcpServer.js';
 import { tcpClientManager } from './tcpClient.js';
 import { initializePaymentSystem } from './payment/initialize.js';
@@ -96,6 +97,69 @@ async function initializeApp() {
     // 初始化支付系统
     const db = getDB();
     await initializePaymentSystem(db);
+
+    // 挂载支付路由
+    const { getRedeemCodeManager } = await import('./payment/initialize.js');
+    const redeemCodeManager = getRedeemCodeManager();
+
+    // 创建支付路由
+    const paymentRouter = createPaymentRoutes(redeemCodeManager);
+
+    // 无需认证的端点: /modules, /notify (支付网关回调)
+    app.use('/api/payment', (req: Request, res: Response, next: NextFunction) => {
+      const path = req.path;
+      if (path === '/modules' || path.startsWith('/modules')) {
+        return next();
+      }
+      authMiddleware(req as AuthRequest, res, next);
+    });
+    app.use('/api/payment', paymentRouter);
+    app.use('/api/admin', authMiddleware, adminMiddleware, createAdminPaymentRoutes(redeemCodeManager));
+
+    // SPA fallback - 在所有路由挂载后再挂载
+    app.use((req: Request, res: Response) => {
+      // 如果是 API 请求但未匹配到路由，返回 404
+      if (req.path.startsWith('/api/') || req.path.startsWith('/v1/') || req.path.startsWith('/v1beta/')) {
+        return res.status(404).json({ error: 'Not found' });
+      }
+      // 否则返回前端页面（如果存在）
+      const indexPath = join(distPath, 'index.html');
+      if (existsSync(indexPath)) {
+        res.sendFile(indexPath, { root: '/' });
+      } else {
+        // 开发模式下，返回提示信息
+        res.status(200).send(`
+          <!DOCTYPE html>
+          <html>
+            <head>
+              <title>Phantom Mock - Development Mode</title>
+              <style>
+                body { font-family: Arial, sans-serif; margin: 40px; }
+                h1 { color: #333; }
+                p { color: #666; line-height: 1.6; }
+                code { background: #f4f4f4; padding: 2px 6px; border-radius: 3px; }
+              </style>
+            </head>
+            <body>
+              <h1>Phantom Mock - Development Mode</h1>
+              <p>Frontend is running in development mode.</p>
+              <p>To access the frontend, please run:</p>
+              <code>pnpm dev:frontend</code>
+              <p>This will start the Vite development server on port 5173.</p>
+              <p>The backend API is available at:</p>
+              <ul>
+                <li>Chat Completions: POST /v1/chat/completions</li>
+                <li>Models: GET /v1/models</li>
+                <li>Auth: POST /api/auth/login</li>
+              </ul>
+            </body>
+          </html>
+        `);
+      }
+    });
+
+    // 错误处理中间件
+    app.use(errorHandler);
 
     console.log('[Server] All data loaded successfully');
   } catch (error) {
@@ -292,63 +356,10 @@ if (existsSync(distPath)) {
   app.use(express.static(distPath));
 }
 
-// SPA fallback - 使用中间件处理所有未匹配的路由
-app.use((req: Request, res: Response) => {
-  // 如果是 API 请求但未匹配到路由，返回 404
-  if (req.path.startsWith('/api/') || req.path.startsWith('/v1/') || req.path.startsWith('/v1beta/')) {
-    return res.status(404).json({ error: 'Not found' });
-  }
-  // 否则返回前端页面（如果存在）
-  const indexPath = join(distPath, 'index.html');
-  if (existsSync(indexPath)) {
-    res.sendFile(indexPath, { root: '/' });
-  } else {
-    // 开发模式下，返回提示信息
-    res.status(200).send(`
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <title>Phantom Mock - Development Mode</title>
-          <style>
-            body { font-family: Arial, sans-serif; margin: 40px; }
-            h1 { color: #333; }
-            p { color: #666; line-height: 1.6; }
-            code { background: #f4f4f4; padding: 2px 6px; border-radius: 3px; }
-          </style>
-        </head>
-        <body>
-          <h1>Phantom Mock - Development Mode</h1>
-          <p>Frontend is running in development mode.</p>
-          <p>To access the frontend, please run:</p>
-          <code>pnpm dev:frontend</code>
-          <p>This will start the Vite development server on port 5173.</p>
-          <p>The backend API is available at:</p>
-          <ul>
-            <li>Chat Completions: POST /v1/chat/completions</li>
-            <li>Models: GET /v1/models</li>
-            <li>Auth: POST /api/auth/login</li>
-          </ul>
-        </body>
-      </html>
-    `);
-  }
-});
-
-// ==================== 错误处理中间件 ====================
-app.use(errorHandler);
-
 // ==================== 启动服务 ====================
 async function start() {
   // 初始化数据库和数据
   await initializeApp();
-
-  // 初始化支付系统后，挂载支付路由
-  const { getRedeemCodeManager } = await import('./payment/initialize.js');
-  const redeemCodeManager = getRedeemCodeManager();
-
-  // 挂载支付路由
-  app.use('/api/payment', createPaymentRoutes(redeemCodeManager));
-  app.use('/api/admin', authMiddleware, adminMiddleware, createAdminPaymentRoutes(redeemCodeManager));
 
   // 加载配置
   const serverConfig = await getServerConfig();
@@ -357,10 +368,12 @@ async function start() {
 
   server.listen(PORT, async () => {
     initWebSocket(server);
+    initReverseWebSocket(server, '/reverse-ws');
     console.log('========================================');
     console.log('Phantom Mock 已启动');
     console.log('端口:', PORT);
     console.log('前端地址:', `http://localhost:${PORT}`);
+    console.log('反向 WebSocket 地址:', `ws://localhost:${PORT}/reverse-ws`);
     console.log('========================================');
 
     // 启动 TCP 服务器（如果启用）

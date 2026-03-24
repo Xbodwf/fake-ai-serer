@@ -30,7 +30,7 @@ import { formatCurrency } from '../utils/currency';
 function getSupportedEndpoints(modelType?: string, modelId?: string): string[] {
   const model = modelId || '{model_id}';
   const endpoints: Record<string, string[]> = {
-    text: ['/v1/chat/completions', '/v1/completions', '/v1/messages'],
+    text: ['/v1/chat/completions', '/v1/completions', '/v1/messages', `/v1beta/models/${model}:generateContent`, `/v1beta/models/${model}:streamGenerateContent`],
     image: ['/v1/images/generations', '/v1/images/edits', `/v1beta/models/${model}:generateContent`],
     embedding: ['/v1/embeddings', `/v1beta/models/${model}:embedContent`],
     video: ['/v1/videos/generations', `/v1beta/models/${model}:generateContent`],

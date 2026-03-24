@@ -73,10 +73,19 @@ function getEndpointType(path: string): string | undefined {
 
 /**
  * JWT 认证中间件
+ * 支持从 Authorization header 或 URL params 读取 token
+ * 优先级: Authorization header > URL params
  */
 export async function authMiddleware(req: AuthRequest, res: Response, next: NextFunction) {
   try {
-    const token = extractTokenFromHeader(req.headers.authorization);
+    // 优先从 Authorization header 读取
+    let token: string | null = extractTokenFromHeader(req.headers.authorization);
+
+    // 如果 header 中没有，尝试从 URL params 读取
+    if (!token && req.query.token) {
+      token = req.query.token as string;
+    }
+
     if (!token) {
       return res.status(401).json({ error: 'Missing authorization token' });
     }

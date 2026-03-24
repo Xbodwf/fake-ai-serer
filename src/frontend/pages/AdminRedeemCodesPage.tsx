@@ -24,6 +24,7 @@ import {
   Chip,
   CircularProgress,
 } from '@mui/material';
+import { useTranslation } from 'react-i18next';
 import { formatCurrency } from '../utils/currency';
 
 interface RedeemCode {
@@ -46,6 +47,7 @@ interface Stats {
 }
 
 export function AdminRedeemCodesPage() {
+  const { t } = useTranslation();
   const { token } = useAuth();
   const [codes, setCodes] = useState<RedeemCode[]>([]);
   const [stats, setStats] = useState<Stats | null>(null);
@@ -90,7 +92,7 @@ export function AdminRedeemCodesPage() {
 
   const handleCreateCode = async () => {
     if (!formData.code || !formData.amount) {
-      alert('Please fill in all required fields');
+      alert(t('redeemCodes.validation.requiredFields', 'Please fill in all required fields'));
       return;
     }
 
@@ -112,14 +114,14 @@ export function AdminRedeemCodesPage() {
       fetchCodes();
       fetchStats();
     } catch (err: any) {
-      alert(err.response?.data?.error || 'Failed to create code');
+      alert(err.response?.data?.error || t('redeemCodes.errors.failedCreate', 'Failed to create code'));
     } finally {
       setCreateLoading(false);
     }
   };
 
   const handleDeleteCode = async (id: string) => {
-    if (!window.confirm('Are you sure you want to delete this code?')) return;
+    if (!window.confirm(t('redeemCodes.confirmDelete', 'Are you sure you want to delete this code?'))) return;
 
     try {
       await axios.delete(`/api/admin/redeem-codes/${id}`, {
@@ -128,7 +130,7 @@ export function AdminRedeemCodesPage() {
       fetchCodes();
       fetchStats();
     } catch (err) {
-      alert('Failed to delete code');
+      alert(t('redeemCodes.errors.failedDelete', 'Failed to delete code'));
     }
   };
 
@@ -153,10 +155,10 @@ export function AdminRedeemCodesPage() {
     <Container maxWidth="lg" sx={{ py: 4 }}>
       <Box sx={{ mb: 4 }}>
         <Typography variant="h4" sx={{ fontWeight: 600, mb: 1 }}>
-          Redemption Codes Management
+          {t('redeemCodes.title', 'Redemption Codes Management')}
         </Typography>
         <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-          Manage redemption codes for user balance
+          {t('redeemCodes.description', 'Manage redemption codes for user balance')}
         </Typography>
       </Box>
 
@@ -166,7 +168,7 @@ export function AdminRedeemCodesPage() {
           <Card>
             <CardContent>
               <Typography color="textSecondary" gutterBottom>
-                Total Codes
+                {t('redeemCodes.stats.totalCodes', 'Total Codes')}
               </Typography>
               <Typography variant="h5">{stats.totalCodes}</Typography>
             </CardContent>
@@ -174,7 +176,7 @@ export function AdminRedeemCodesPage() {
           <Card>
             <CardContent>
               <Typography color="textSecondary" gutterBottom>
-                Active
+                {t('redeemCodes.stats.active', 'Active')}
               </Typography>
               <Typography variant="h5" sx={{ color: 'success.main' }}>
                 {stats.activeCodes}
@@ -184,7 +186,7 @@ export function AdminRedeemCodesPage() {
           <Card>
             <CardContent>
               <Typography color="textSecondary" gutterBottom>
-                Used
+                {t('redeemCodes.stats.used', 'Used')}
               </Typography>
               <Typography variant="h5" sx={{ color: 'warning.main' }}>
                 {stats.usedCodes}
@@ -194,7 +196,7 @@ export function AdminRedeemCodesPage() {
           <Card>
             <CardContent>
               <Typography color="textSecondary" gutterBottom>
-                Total Amount
+                {t('redeemCodes.stats.totalAmount', 'Total Amount')}
               </Typography>
               <Typography variant="h5" sx={{ color: 'primary.main' }}>
                 {formatCurrency(stats.totalAmount)}
@@ -211,7 +213,7 @@ export function AdminRedeemCodesPage() {
           color="primary"
           onClick={() => setCreateDialogOpen(true)}
         >
-          Create New Code
+          {t('redeemCodes.createButton', 'Create New Code')}
         </Button>
       </Box>
 
@@ -219,20 +221,20 @@ export function AdminRedeemCodesPage() {
       <Card>
         <CardContent>
           <Typography variant="h6" sx={{ fontWeight: 600, mb: 2 }}>
-            Redemption Codes
+            {t('redeemCodes.table.title', 'Redemption Codes')}
           </Typography>
           {codes.length > 0 ? (
             <TableContainer>
               <Table>
                 <TableHead>
                   <TableRow sx={{ backgroundColor: 'action.hover' }}>
-                    <TableCell>Code</TableCell>
-                    <TableCell align="right">Amount</TableCell>
-                    <TableCell>Status</TableCell>
-                    <TableCell>Description</TableCell>
-                    <TableCell>Created</TableCell>
-                    <TableCell>Expires</TableCell>
-                    <TableCell>Actions</TableCell>
+                    <TableCell>{t('redeemCodes.table.code', 'Code')}</TableCell>
+                    <TableCell align="right">{t('redeemCodes.table.amount', 'Amount')}</TableCell>
+                    <TableCell>{t('redeemCodes.table.status', 'Status')}</TableCell>
+                    <TableCell>{t('redeemCodes.table.description', 'Description')}</TableCell>
+                    <TableCell>{t('redeemCodes.table.created', 'Created')}</TableCell>
+                    <TableCell>{t('redeemCodes.table.expires', 'Expires')}</TableCell>
+                    <TableCell>{t('common.actions', 'Actions')}</TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
@@ -244,18 +246,18 @@ export function AdminRedeemCodesPage() {
                       <TableCell align="right">{formatCurrency(code.amount)}</TableCell>
                       <TableCell>
                         <Chip
-                          label={code.status}
+                          label={t(`redeemCodes.statuses.${code.status}`, code.status)}
                           color={getStatusColor(code.status)}
                           size="small"
                           sx={{ textTransform: 'capitalize' }}
                         />
                       </TableCell>
-                      <TableCell>{code.description || '-'}</TableCell>
+                      <TableCell>{code.description || t('common.notAvailable', '-')}</TableCell>
                       <TableCell>
                         {new Date(code.createdAt).toLocaleDateString()}
                       </TableCell>
                       <TableCell>
-                        {code.expiresAt ? new Date(code.expiresAt).toLocaleDateString() : '-'}
+                        {code.expiresAt ? new Date(code.expiresAt).toLocaleDateString() : t('common.notAvailable', '-')}
                       </TableCell>
                       <TableCell>
                         <Button
@@ -263,7 +265,7 @@ export function AdminRedeemCodesPage() {
                           color="error"
                           onClick={() => handleDeleteCode(code._id)}
                         >
-                          Delete
+                          {t('common.delete', 'Delete')}
                         </Button>
                       </TableCell>
                     </TableRow>
@@ -273,7 +275,7 @@ export function AdminRedeemCodesPage() {
             </TableContainer>
           ) : (
             <Typography sx={{ textAlign: 'center', py: 4, color: 'text.secondary' }}>
-              No redemption codes found
+              {t('redeemCodes.empty', 'No redemption codes found')}
             </Typography>
           )}
         </CardContent>
@@ -281,20 +283,20 @@ export function AdminRedeemCodesPage() {
 
       {/* 创建对话框 */}
       <Dialog open={createDialogOpen} onClose={() => setCreateDialogOpen(false)} maxWidth="sm" fullWidth>
-        <DialogTitle>Create Redemption Code</DialogTitle>
+        <DialogTitle>{t('redeemCodes.dialog.createTitle', 'Create Redemption Code')}</DialogTitle>
         <DialogContent sx={{ pt: 2 }}>
           <TextField
             fullWidth
-            label="Code"
+            label={t('redeemCodes.form.code', 'Code')}
             value={formData.code}
             onChange={(e) => setFormData({ ...formData, code: e.target.value.toUpperCase() })}
             disabled={createLoading}
-            placeholder="e.g., SUMMER2024"
+            placeholder={t('redeemCodes.form.codePlaceholder', 'e.g., SUMMER2024')}
             sx={{ mb: 2 }}
           />
           <TextField
             fullWidth
-            label="Amount"
+            label={t('redeemCodes.form.amount', 'Amount')}
             type="number"
             value={formData.amount}
             onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
@@ -304,16 +306,16 @@ export function AdminRedeemCodesPage() {
           />
           <TextField
             fullWidth
-            label="Description"
+            label={t('redeemCodes.form.description', 'Description')}
             value={formData.description}
             onChange={(e) => setFormData({ ...formData, description: e.target.value })}
             disabled={createLoading}
-            placeholder="Optional description"
+            placeholder={t('redeemCodes.form.descriptionPlaceholder', 'Optional description')}
             sx={{ mb: 2 }}
           />
           <TextField
             fullWidth
-            label="Expires At"
+            label={t('redeemCodes.form.expiresAt', 'Expires At')}
             type="datetime-local"
             value={formData.expiresAt}
             onChange={(e) => setFormData({ ...formData, expiresAt: e.target.value })}
@@ -323,14 +325,14 @@ export function AdminRedeemCodesPage() {
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setCreateDialogOpen(false)} disabled={createLoading}>
-            Cancel
+            {t('common.cancel', 'Cancel')}
           </Button>
           <Button
             onClick={handleCreateCode}
             variant="contained"
             disabled={createLoading || !formData.code || !formData.amount}
           >
-            {createLoading ? <CircularProgress size={24} /> : 'Create'}
+            {createLoading ? <CircularProgress size={24} /> : t('common.create', 'Create')}
           </Button>
         </DialogActions>
       </Dialog>

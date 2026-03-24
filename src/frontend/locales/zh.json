@@ -417,10 +417,17 @@
     "usageCount": "已使用 {{count}} 次",
     "select": "选择",
     "overview": "概览",
-    "parameters": "参数",
+    "inspector": "检查器",
     "code": "代码",
     "description": "描述",
-    "noParameters": "无需参数"
+    "name": "名称",
+    "version": "版本",
+    "author": "作者",
+    "config": "配置",
+    "inputs": "输入",
+    "outputs": "输出",
+    "noParameters": "无需参数",
+    "noMetadata": "元数据中未定义配置、输入或输出"
   },
   "errors": {
     "failedToLoad": "加载失败",

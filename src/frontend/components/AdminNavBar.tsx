@@ -35,7 +35,7 @@ export function AdminNavBar() {
     { label: t('nav.models'), path: '/console/models' },
     { label: t('nav.users'), path: '/console/users' },
     { label: t('nav.notifications'), path: '/console/notifications' },
-    { label: 'Redeem Codes', path: '/console/redeem-codes' },
+    { label: t('nav.redeemCodes', 'Redeem Codes'), path: '/console/redeem-codes' },
     { label: t('nav.loginSettings'), path: '/console/settings' },
   ];
 

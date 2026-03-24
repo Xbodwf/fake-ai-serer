@@ -154,6 +154,41 @@ export async function forwardStreamRequest(
   const forwardModel = getForwardModelName(model, body.model);
   const forwardBody = { ...body, model: forwardModel };
 
+  // 检查并修复工具调用中的 thought_signature（与 forwardToOpenAI 相同）
+  if (forwardBody.tools || forwardBody.functions) {
+    console.log('[Forwarder] 流式请求检测到工具调用，确保 thought_signature 存在');
+    
+    // 处理 tools 数组
+    if (forwardBody.tools && Array.isArray(forwardBody.tools)) {
+      forwardBody.tools = forwardBody.tools.map((tool: any) => {
+        if (tool.type === 'function' && tool.function) {
+          // 确保 function 对象有 thought_signature
+          if (!tool.function.thought_signature) {
+            tool.function.thought_signature = '';
+          }
+        }
+        return tool;
+      });
+    }
+    
+    // 处理 functions 数组（旧版格式）
+    if (forwardBody.functions && Array.isArray(forwardBody.functions)) {
+      forwardBody.functions = forwardBody.functions.map((func: any) => {
+        if (!func.thought_signature) {
+          func.thought_signature = '';
+        }
+        return func;
+      });
+    }
+    
+    // 处理 tool_choice
+    if (forwardBody.tool_choice && typeof forwardBody.tool_choice === 'object') {
+      if (!forwardBody.tool_choice.thought_signature) {
+        forwardBody.tool_choice.thought_signature = '';
+      }
+    }
+  }
+
   const response = await axios.post(url, forwardBody, {
     headers: {
       'Authorization': `Bearer ${model.api_key}`,
@@ -204,6 +239,42 @@ async function forwardToOpenAI(
   // 使用转发模型名称
   const forwardModel = getForwardModelName(model, body.model);
   const forwardBody = { ...body, model: forwardModel };
+
+  // 检查并修复工具调用中的 thought_signature
+  // 某些 OpenAI 兼容的 API 需要这个字段
+  if (forwardBody.tools || forwardBody.functions) {
+    console.log('[Forwarder] 检测到工具调用，确保 thought_signature 存在');
+    
+    // 处理 tools 数组
+    if (forwardBody.tools && Array.isArray(forwardBody.tools)) {
+      forwardBody.tools = forwardBody.tools.map((tool: any) => {
+        if (tool.type === 'function' && tool.function) {
+          // 确保 function 对象有 thought_signature
+          if (!tool.function.thought_signature) {
+            tool.function.thought_signature = '';
+          }
+        }
+        return tool;
+      });
+    }
+    
+    // 处理 functions 数组（旧版格式）
+    if (forwardBody.functions && Array.isArray(forwardBody.functions)) {
+      forwardBody.functions = forwardBody.functions.map((func: any) => {
+        if (!func.thought_signature) {
+          func.thought_signature = '';
+        }
+        return func;
+      });
+    }
+    
+    // 处理 tool_choice
+    if (forwardBody.tool_choice && typeof forwardBody.tool_choice === 'object') {
+      if (!forwardBody.tool_choice.thought_signature) {
+        forwardBody.tool_choice.thought_signature = '';
+      }
+    }
+  }
 
   const response = await axios.post(url, forwardBody, {
     headers: {

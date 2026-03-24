@@ -129,7 +129,7 @@ export function ActionMarketplace({ onSelectAction }: ActionMarketplaceProps) {
   const fetchPublicActions = async () => {
     try {
       setLoading(true);
-      const response = await axios.get('/v1/actions/models', {
+      const response = await axios.get('/api/actions', {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
       // 只获取公开的 actions

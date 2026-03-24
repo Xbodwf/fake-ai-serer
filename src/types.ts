@@ -29,6 +29,9 @@ export interface ChatCompletionRequest {
   presence_penalty?: number;
   frequency_penalty?: number;
   user?: string;
+  tools?: any[];
+  functions?: any[];
+  tool_choice?: any;
 }
 
 export interface ChatCompletionResponse {
@@ -497,7 +500,7 @@ export interface ModelsResponse {
 
 // WebSocket 消息类型
 export interface WSMessage {
-  type: 'request' | 'response' | 'stream' | 'stream_end' | 'connected' | 'models_update' | 'image_response' | 'video_response';
+  type: 'request' | 'response' | 'stream' | 'stream_end' | 'connected' | 'models_update' | 'image_response' | 'video_response' | 'reverse-connect' | 'reverse-connect-ack' | 'reverse-disconnect';
   payload: {
     requestId: string;
     data: ChatCompletionRequest;
@@ -527,6 +530,14 @@ export interface WSMessage {
     message: string;
   } | {
     models: Model[];
+  } | {
+    clientId?: string;
+    capabilities?: string[];
+    maxConcurrentRequests?: number;
+  } | {
+    success: boolean;
+    clientId: string;
+    message?: string;
   };
 }
 

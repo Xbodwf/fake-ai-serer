@@ -64,5 +64,10 @@ export async function initializeIndexes(): Promise<void> {
   await createIndexSafe('notifications', { isActive: 1 });
   await createIndexSafe('notifications', { isPinned: 1 });
 
+  // PaymentOrders indexes
+  await createIndexSafe('payment_orders', { outTradeNo: 1 }, { unique: true });
+  await createIndexSafe('payment_orders', { userId: 1, createdAt: -1 });
+  await createIndexSafe('payment_orders', { status: 1 });
+
   console.log('Database indexes initialized successfully');
 }

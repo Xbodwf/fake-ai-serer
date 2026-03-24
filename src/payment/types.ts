@@ -55,6 +55,9 @@ export interface PaymentRequest {
   // 业务扩展参数（支付后原样返回）
   param?: string;
 
+  // 认证 token（用于回调 URL 认证）
+  authToken?: string;
+
   // 支付渠道ID
   channelId?: number;
 }

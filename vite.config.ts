@@ -1,11 +1,17 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
+import reactSwc from '@vitejs/plugin-react-swc'
 
 // 从环境变量获取后端端口，默认 7143
 const backendPort = parseInt(process.env.BACKEND_PORT || process.env.PORT || '7143')
 
+// 编译器选择：通过环境变量 VITE_REACT_COMPILER 切换
+// - 'swc' (默认): 使用 @vitejs/plugin-react-swc (SWC，更快)
+// - 'babel': 使用 @vitejs/plugin-react (Babel)
+const reactCompiler = process.env.VITE_REACT_COMPILER || 'swc'
+
 export default defineConfig({
-  plugins: [react()],
+  plugins: [reactCompiler === 'swc' ? reactSwc() : react()],
   root: '.',
   publicDir: 'public',
   server: {
