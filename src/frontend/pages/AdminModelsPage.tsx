@@ -34,6 +34,24 @@ import { LoadingSpinner } from '../components/LoadingSpinner';
 import axios from 'axios';
 import type { Model } from '../../types.js';
 
+const defaultFormData = {
+  id: '',
+  description: '',
+  owned_by: '',
+  type: 'text' as 'text' | 'image' | 'video' | 'tts' | 'stt' | 'embedding' | 'rerank' | 'responses',
+  icon: '',
+  api_key: '',
+  api_base_url: '',
+  api_type: 'openai' as 'openai' | 'anthropic' | 'google' | 'azure' | 'custom',
+  forwardModelName: '',
+  api_url_templates: {
+    chat: '',
+    embeddings: '',
+    geminiGenerateContent: '',
+    geminiEmbedContent: '',
+  },
+};
+
 export function AdminModelsPage() {
   const navigate = useNavigate();
   const { user, token } = useAuth();
@@ -45,13 +63,7 @@ export function AdminModelsPage() {
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [showEditDialog, setShowEditDialog] = useState(false);
   const [selectedModel, setSelectedModel] = useState<Model | null>(null);
-  const [formData, setFormData] = useState({
-    id: '',
-    description: '',
-    owned_by: '',
-    type: 'text' as 'text' | 'image' | 'video' | 'tts' | 'stt' | 'embedding' | 'rerank' | 'responses',
-    icon: '',
-  });
+  const [formData, setFormData] = useState(defaultFormData);
   const [pricing, setPricing] = useState({
     input: 0,
     output: 0,
@@ -84,6 +96,14 @@ export function AdminModelsPage() {
     }
   };
 
+  const normalizeApiUrlTemplates = () => {
+    const entries = Object.entries(formData.api_url_templates)
+      .map(([key, value]) => [key, value.trim()] as const)
+      .filter(([, value]) => value.length > 0);
+
+    return entries.length > 0 ? Object.fromEntries(entries) : undefined;
+  };
+
   const handleCreateModel = async () => {
     if (!formData.id.trim()) {
       setError(t('models.idRequired'));
@@ -92,16 +112,19 @@ export function AdminModelsPage() {
 
     try {
       setError('');
+      const api_url_templates = normalizeApiUrlTemplates();
+
       await axios.post(
         '/api/admin/models',
         {
           ...formData,
+          ...(api_url_templates ? { api_url_templates } : {}),
           pricing: pricing.type === 'request' ? { perRequest: pricing.perRequest } : pricing,
         },
         { headers: { Authorization: `Bearer ${token}` } }
       );
       setShowCreateDialog(false);
-      setFormData({ id: '', description: '', owned_by: '', type: 'text', icon: '' });
+      setFormData(defaultFormData);
       setPricing({ input: 0, output: 0, unit: 'K', type: 'token', perRequest: 0 });
       setSuccess(t('models.createdSuccessfully'));
       await fetchModels();
@@ -118,6 +141,16 @@ export function AdminModelsPage() {
       owned_by: model.owned_by || '',
       type: model.type || 'text',
       icon: model.icon || '',
+      api_key: model.api_key || '',
+      api_base_url: model.api_base_url || '',
+      api_type: model.api_type || 'openai',
+      forwardModelName: model.forwardModelName || '',
+      api_url_templates: {
+        chat: model.api_url_templates?.chat || '',
+        embeddings: model.api_url_templates?.embeddings || '',
+        geminiGenerateContent: model.api_url_templates?.geminiGenerateContent || '',
+        geminiEmbedContent: model.api_url_templates?.geminiEmbedContent || '',
+      },
     });
     setPricing({
       input: model.pricing?.input || 0,
@@ -134,10 +167,13 @@ export function AdminModelsPage() {
 
     try {
       setError('');
+      const api_url_templates = normalizeApiUrlTemplates();
+
       await axios.put(
         `/api/admin/models/${encodeURIComponent(selectedModel.id)}`,
         {
           ...formData,
+          ...(api_url_templates ? { api_url_templates } : {}),
           type: formData.type,
           pricing: pricing.type === 'request' ? { perRequest: pricing.perRequest } : pricing,
         },
@@ -187,7 +223,7 @@ export function AdminModelsPage() {
           startIcon={<Plus size={20} />}
           onClick={() => {
             setSelectedModel(null);
-            setFormData({ id: '', description: '', owned_by: '', type: 'text', icon: '' });
+            setFormData(defaultFormData);
             setPricing({ input: 0, output: 0, unit: 'K', type: 'token', perRequest: 0 });
             setShowCreateDialog(true);
           }}
@@ -359,7 +395,103 @@ export function AdminModelsPage() {
               </Stack>
             </Box>
 
-            {/* 定价 */}
+            {/* 转发配置 */}
+ <Box>
+ <Typography variant="subtitle2" sx={{ fontWeight:600, mb:2 }}>
+ Forwarding
+ </Typography>
+ <Stack spacing={2}>
+ <FormControl fullWidth size="small">
+ <InputLabel id="api-type-label">API Type</InputLabel>
+ <Select
+ labelId="api-type-label"
+ value={formData.api_type}
+ label="API Type"
+ onChange={(e) => setFormData({ ...formData, api_type: e.target.value as any })}
+ >
+ <MenuItem value="openai">OpenAI</MenuItem>
+ <MenuItem value="anthropic">Anthropic</MenuItem>
+ <MenuItem value="google">Google</MenuItem>
+ <MenuItem value="azure">Azure</MenuItem>
+ <MenuItem value="custom">Custom</MenuItem>
+ </Select>
+ </FormControl>
+ <TextField
+ fullWidth
+ size="small"
+ label="API Key"
+ value={formData.api_key}
+ onChange={(e) => setFormData({ ...formData, api_key: e.target.value })}
+ placeholder="sk-..."
+ />
+ <TextField
+ fullWidth
+ size="small"
+ label="API Base URL"
+ value={formData.api_base_url}
+ onChange={(e) => setFormData({ ...formData, api_base_url: e.target.value })}
+ placeholder="https://api.openai.com/v1"
+ />
+ <TextField
+ fullWidth
+ size="small"
+ label="Forward Model Name"
+ value={formData.forwardModelName}
+ onChange={(e) => setFormData({ ...formData, forwardModelName: e.target.value })}
+ placeholder="留空则使用请求模型名"
+ />
+ <TextField
+ fullWidth
+ size="small"
+ label="Chat URL Template"
+ value={formData.api_url_templates.chat}
+ onChange={(e) => setFormData({
+ ...formData,
+ api_url_templates: { ...formData.api_url_templates, chat: e.target.value }
+ })}
+ placeholder="{baseUrl}/chat/completions"
+ helperText="变量: {baseUrl} {model} {forwardModel} {apiKey}"
+ />
+ <TextField
+ fullWidth
+ size="small"
+ label="Embeddings URL Template"
+ value={formData.api_url_templates.embeddings}
+ onChange={(e) => setFormData({
+ ...formData,
+ api_url_templates: { ...formData.api_url_templates, embeddings: e.target.value }
+ })}
+ placeholder="{baseUrl}/embeddings"
+ helperText="变量: {baseUrl} {model} {forwardModel} {apiKey}"
+ />
+ <TextField
+ fullWidth
+ size="small"
+ label="Gemini Generate URL Template"
+ value={formData.api_url_templates.geminiGenerateContent}
+ onChange={(e) => setFormData({
+ ...formData,
+ api_url_templates: { ...formData.api_url_templates, geminiGenerateContent: e.target.value }
+ })}
+ placeholder="{baseUrl}/v1beta/models/{forwardModel}:generateContent?key={apiKey}"
+ helperText="变量: {baseUrl} {model} {forwardModel} {apiKey}"
+ />
+ <TextField
+ fullWidth
+ size="small"
+ label="Gemini Embeddings URL Template"
+ value={formData.api_url_templates.geminiEmbedContent}
+ onChange={(e) => setFormData({
+ ...formData,
+ api_url_templates: { ...formData.api_url_templates, geminiEmbedContent: e.target.value }
+ })}
+ placeholder="{baseUrl}/v1beta/models/{forwardModel}:embedContent?key={apiKey}"
+ helperText="变量: {baseUrl} {model} {forwardModel} {apiKey}"
+ />
+ </Stack>
+ </Box>
+
+ {/* 定价 */}
             <Box>
               <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 2 }}>
                 {t('models.details.pricing')}

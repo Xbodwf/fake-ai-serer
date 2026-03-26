@@ -26,6 +26,15 @@ export interface ChatCompletionRequest {
   user?: string;
 }
 
+export interface ApiUrlTemplates {
+  chat?: string;
+  embeddings?: string;
+  rerank?: string;
+  geminiGenerateContent?: string;
+  geminiStreamGenerateContent?: string;
+  geminiEmbedContent?: string;
+}
+
 export interface Model {
   id: string;
   object: 'model';
@@ -69,6 +78,7 @@ export interface Model {
   api_key?: string;
   api_base_url?: string;
   api_type?: 'openai' | 'anthropic' | 'google' | 'azure' | 'custom';
+  api_url_templates?: ApiUrlTemplates;
   forwardModelName?: string;      // 转发时使用的模型名称
   supported_features?: string[];
   require_api_key?: boolean;

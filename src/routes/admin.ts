@@ -415,7 +415,7 @@ router.get('/models/:id', authMiddleware, adminMiddleware, (req: AuthRequest, re
  */
 router.post('/models', authMiddleware, adminMiddleware, async (req: AuthRequest, res: Response) => {
   try {
-    const { id, description, owned_by, type, pricing, supported_features, icon } = req.body;
+    const { id, description, owned_by, type, pricing, supported_features, icon, api_key, api_base_url, api_type, api_url_templates, forwardModelName } = req.body;
 
     if (!id) {
       return res.status(400).json({ error: 'Model ID is required' });
@@ -433,6 +433,11 @@ router.post('/models', authMiddleware, adminMiddleware, async (req: AuthRequest,
       pricing,
       supported_features,
       icon,
+      api_key,
+      api_base_url,
+      api_type,
+      api_url_templates,
+      forwardModelName,
     });
 
     res.status(201).json(newModel);

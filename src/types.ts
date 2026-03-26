@@ -66,6 +66,15 @@ export interface ChatCompletionChunk {
   }>;
 }
 
+export interface ApiUrlTemplates {
+  chat?: string;
+  embeddings?: string;
+  rerank?: string;
+  geminiGenerateContent?: string;
+  geminiStreamGenerateContent?: string;
+  geminiEmbedContent?: string;
+}
+
 export interface Model {
   id: string;
   object: 'model';
@@ -110,6 +119,7 @@ export interface Model {
   api_key?: string; // 模型关联的API密钥（用于转发）
   api_base_url?: string; // API基础URL（用于转发）
   api_type?: 'openai' | 'anthropic' | 'google' | 'azure' | 'custom'; // API接口类型（用于转发）
+  api_url_templates?: ApiUrlTemplates; // 按 endpoint 自定义完整转发 URL 模板
   forwardModelName?: string; // 转发时使用的模型名称（不同平台模型名称可能不同）
   supported_features?: string[]; // 支持的特性，如 ['chat', 'vision', 'function_calling']
   require_api_key?: boolean; // 是否需要API Key才能访问（默认true）

@@ -85,6 +85,136 @@ function getForwardModelName(model: Model, requestedModel: string): string {
   return model.forwardModelName || requestedModel;
 }
 
+function hasUrlTemplateConfigured(model: Model): boolean {
+ const templates = model.api_url_templates;
+ if (!templates) return false;
+ return Object.values(templates).some(value => typeof value === 'string' && value.trim() !== '');
+}
+
+export function isModelForwardingConfigured(model: Model): boolean {
+ return !!model.api_key && (!!model.api_base_url || hasUrlTemplateConfigured(model));
+}
+
+type ForwardEndpoint =
+ | 'chat'
+ | 'embeddings'
+ | 'rerank'
+ | 'anthropicMessages'
+ | 'geminiGenerateContent'
+ | 'geminiStreamGenerateContent'
+ | 'geminiEmbedContent';
+
+function normalizeBaseUrl(baseUrl: string): string {
+ return baseUrl.endsWith('/') ? baseUrl.slice(0, -1) : baseUrl;
+}
+
+function appendPath(baseUrl: string, path: string): string {
+ const normalizedBase = normalizeBaseUrl(baseUrl);
+ const normalizedPath = path.startsWith('/') ? path : `/${path}`;
+ return `${normalizedBase}${normalizedPath}`;
+}
+
+function applyUrlTemplate(
+ template: string,
+ params: {
+ baseUrl: string;
+ requestedModel: string;
+ forwardModel: string;
+ apiKey: string;
+ }
+): string {
+ return template.replace(/\{(baseUrl|model|forwardModel|apiKey)\}/g, (_, key: string) => {
+ switch (key) {
+ case 'baseUrl':
+ return params.baseUrl;
+ case 'model':
+ return encodeURIComponent(params.requestedModel);
+ case 'forwardModel':
+ return encodeURIComponent(params.forwardModel);
+ case 'apiKey':
+ return encodeURIComponent(params.apiKey);
+ default:
+ return '';
+ }
+ });
+}
+
+function getEndpointTemplate(model: Model, endpoint: ForwardEndpoint): string | undefined {
+ const templates = model.api_url_templates;
+ if (!templates) return undefined;
+
+ switch (endpoint) {
+ case 'chat':
+ return templates.chat;
+ case 'embeddings':
+ return templates.embeddings;
+ case 'rerank':
+ return templates.rerank;
+ case 'anthropicMessages':
+ return templates.chat;
+ case 'geminiGenerateContent':
+ return templates.geminiGenerateContent;
+ case 'geminiStreamGenerateContent':
+ return templates.geminiStreamGenerateContent;
+ case 'geminiEmbedContent':
+ return templates.geminiEmbedContent;
+ default:
+ return undefined;
+ }
+}
+
+function resolveForwardUrl(
+ model: Model,
+ endpoint: ForwardEndpoint,
+ requestedModel: string,
+ forwardModel: string
+): string {
+ if (!model.api_key) {
+ throw new Error('Model not configured for forwarding: missing api_key');
+ }
+
+ const template = getEndpointTemplate(model, endpoint);
+ const baseUrl = normalizeBaseUrl(model.api_base_url || '');
+
+ if (template && template.trim()) {
+ return applyUrlTemplate(template.trim(), {
+ baseUrl,
+ requestedModel,
+ forwardModel,
+ apiKey: model.api_key,
+ });
+ }
+
+ if (!model.api_base_url) {
+ throw new Error(`Model not configured for forwarding endpoint: ${endpoint}`);
+ }
+
+ switch (endpoint) {
+ case 'chat':
+ return model.api_base_url.includes('/chat/completions')
+ ? model.api_base_url
+ : appendPath(model.api_base_url, '/chat/completions');
+ case 'embeddings':
+ return model.api_base_url.includes('/embeddings')
+ ? model.api_base_url
+ : appendPath(model.api_base_url, '/embeddings');
+ case 'rerank':
+ return model.api_base_url.includes('/rerank')
+ ? model.api_base_url
+ : appendPath(model.api_base_url, '/rerank');
+ case 'anthropicMessages':
+ return appendPath(model.api_base_url, '/v1/messages');
+ case 'geminiGenerateContent':
+ return `${baseUrl}/v1beta/models/${encodeURIComponent(forwardModel)}:generateContent?key=${encodeURIComponent(model.api_key)}`;
+ case 'geminiStreamGenerateContent':
+ return `${baseUrl}/v1beta/models/${encodeURIComponent(forwardModel)}:streamGenerateContent?key=${encodeURIComponent(model.api_key)}&alt=sse`;
+ case 'geminiEmbedContent':
+ return `${baseUrl}/v1beta/models/${encodeURIComponent(forwardModel)}:embedContent?key=${encodeURIComponent(model.api_key)}`;
+ default:
+ throw new Error(`Unsupported forwarding endpoint: ${endpoint}`);
+ }
+}
+
 /**
  * 转发请求到真实的 API
  */
@@ -92,7 +222,7 @@ export async function forwardChatRequest(
   model: Model,
   body: ChatCompletionRequest
 ): Promise<{ success: true; response: any } | { success: false; error: string }> {
-  if (!model.api_base_url || !model.api_key) {
+  if (!isModelForwardingConfigured(model)) {
     return { success: false, error: 'Model not configured for forwarding' };
   }
 
@@ -124,6 +254,58 @@ export async function forwardChatRequest(
   }
 }
 
+export async function forwardEmbeddingsRequest(
+  model: Model,
+  body: any
+): Promise<{ success: true; response: any } | { success: false; error: string }> {
+  if (!isModelForwardingConfigured(model)) {
+    return { success: false, error: 'Model not configured for forwarding' };
+  }
+
+  const apiType = model.api_type || 'openai';
+
+  try {
+    const requestedModel = body.model || model.id;
+    const forwardModel = getForwardModelName(model, requestedModel);
+
+    if (apiType === 'google') {
+      const url = resolveForwardUrl(model, 'geminiEmbedContent', requestedModel, forwardModel);
+      const input = Array.isArray(body.input) ? body.input[0] : body.input;
+      const googleBody = {
+        model: `models/${forwardModel}`,
+        content: {
+          parts: [{ text: typeof input === 'string' ? input : JSON.stringify(input) }],
+        },
+      };
+
+      const response = await axios.post(url, googleBody, {
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        timeout: 120000,
+      });
+
+      return { success: true, response: response.data };
+    }
+
+    const url = resolveForwardUrl(model, 'embeddings', requestedModel, forwardModel);
+    const forwardBody = { ...body, model: forwardModel };
+
+    const response = await axios.post(url, forwardBody, {
+      headers: {
+        'Authorization': `Bearer ${model.api_key}`,
+        'Content-Type': 'application/json',
+      },
+      timeout: 120000,
+    });
+
+    return { success: true, response: response.data };
+  } catch (error: any) {
+    const standardizedError = standardizeErrorResponse(error, apiType);
+    return { success: false, error: JSON.stringify(standardizedError) };
+  }
+}
+
 /**
  * 转发流式请求
  */
@@ -132,7 +314,7 @@ export async function forwardStreamRequest(
   body: ChatCompletionRequest,
   res: Response
 ): Promise<void> {
-  if (!model.api_base_url || !model.api_key) {
+  if (!isModelForwardingConfigured(model)) {
     throw new Error('Model not configured for forwarding');
   }
 
@@ -145,13 +327,10 @@ export async function forwardStreamRequest(
   res.setHeader('Connection', 'keep-alive');
   res.setHeader('X-Accel-Buffering', 'no');
 
-  let url = model.api_base_url;
-  if (!url.includes('/chat/completions')) {
-    url = `${url}/chat/completions`;
-  }
+  const forwardModel = getForwardModelName(model, body.model);
+  const url = resolveForwardUrl(model, 'chat', body.model, forwardModel);
 
   // 使用转发模型名称
-  const forwardModel = getForwardModelName(model, body.model);
   const forwardBody = { ...body, model: forwardModel };
 
   // 检查并修复工具调用中的 thought_signature（与 forwardToOpenAI 相同）
@@ -230,14 +409,10 @@ async function forwardToOpenAI(
   model: Model,
   body: ChatCompletionRequest
 ): Promise<{ success: true; response: any }> {
-  // 智能处理 URL：如果 api_base_url 已经包含完整路径，直接使用
-  let url = model.api_base_url!;
-  if (!url.includes('/chat/completions')) {
-    url = `${url}/chat/completions`;
-  }
+  const forwardModel = getForwardModelName(model, body.model);
+  const url = resolveForwardUrl(model, 'chat', body.model, forwardModel);
 
   // 使用转发模型名称
-  const forwardModel = getForwardModelName(model, body.model);
   const forwardBody = { ...body, model: forwardModel };
 
   // 检查并修复工具调用中的 thought_signature
@@ -300,10 +475,9 @@ async function forwardToAnthropic(
   model: Model,
   body: ChatCompletionRequest
 ): Promise<{ success: true; response: any }> {
-  const url = `${model.api_base_url}/v1/messages`;
-
   // 使用转发模型名称
   const forwardModel = getForwardModelName(model, body.model);
+  const url = resolveForwardUrl(model, 'anthropicMessages', body.model, forwardModel);
 
   // 转换消息格式：OpenAI -> Anthropic
   const systemMessages = body.messages.filter(m => m.role === 'system');
@@ -369,9 +543,8 @@ async function forwardToGoogle(
   model: Model,
   body: ChatCompletionRequest
 ): Promise<{ success: true; response: any }> {
-  // 使用转发模型名称
   const forwardModel = getForwardModelName(model, body.model);
-  const url = `${model.api_base_url}/v1beta/models/${forwardModel}:generateContent?key=${model.api_key}`;
+  const url = resolveForwardUrl(model, 'geminiGenerateContent', body.model, forwardModel);
 
   // 转换消息格式：OpenAI -> Google
   const contents = body.messages.map(m => ({
@@ -431,7 +604,7 @@ export async function forwardGeminiRequest(
   model: Model,
   geminiBody: any
 ): Promise<{ success: true; response: any } | { success: false; error: string }> {
-  if (!model.api_base_url || !model.api_key) {
+  if (!isModelForwardingConfigured(model)) {
     return { success: false, error: 'Model not configured for forwarding' };
   }
 
@@ -441,7 +614,7 @@ export async function forwardGeminiRequest(
     // 如果目标是 Google/Gemini API，直接转发 Gemini 格式
     if (apiType === 'google') {
       const forwardModel = model.forwardModelName || model.id;
-      const url = `${model.api_base_url}/v1beta/models/${forwardModel}:generateContent?key=${model.api_key}`;
+      const url = resolveForwardUrl(model, 'geminiGenerateContent', model.id, forwardModel);
 
       console.log(`[Gemini Forwarder] 转发到 Gemini API: ${url}`);
 
@@ -532,7 +705,7 @@ export async function forwardGeminiStreamRequest(
   geminiBody: any,
   res: Response
 ): Promise<void> {
-  if (!model.api_base_url || !model.api_key) {
+  if (!isModelForwardingConfigured(model)) {
     throw new Error('Model not configured for forwarding');
   }
 
@@ -547,7 +720,7 @@ export async function forwardGeminiStreamRequest(
   // 如果目标是 Google/Gemini API，直接转发
   if (apiType === 'google') {
     const forwardModel = model.forwardModelName || model.id;
-    const url = `${model.api_base_url}/v1beta/models/${forwardModel}:streamGenerateContent?key=${model.api_key}&alt=sse`;
+    const url = resolveForwardUrl(model, 'geminiStreamGenerateContent', model.id, forwardModel);
 
     console.log(`[Gemini Forwarder] 流式转发到 Gemini API: ${url}`);
 
@@ -598,8 +771,9 @@ export async function forwardGeminiStreamRequest(
     });
   }
 
+  const forwardModel = model.forwardModelName || model.id;
   const openaiBody: ChatCompletionRequest = {
-    model: model.forwardModelName || model.id,
+    model: forwardModel,
     messages,
     stream: true,
     temperature: geminiBody.generationConfig?.temperature,
@@ -610,10 +784,7 @@ export async function forwardGeminiStreamRequest(
   console.log(`[Gemini Forwarder] 流式转换为 OpenAI 格式，转发到 ${apiType} API`);
 
   // 2. 转发 OpenAI 格式请求
-  let url = model.api_base_url;
-  if (!url.includes('/chat/completions')) {
-    url = `${url}/chat/completions`;
-  }
+  const url = resolveForwardUrl(model, 'chat', model.id, forwardModel);
 
   const response = await axios.post(url, openaiBody, {
     headers: {

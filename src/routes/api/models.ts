@@ -18,7 +18,7 @@ router.get('/', (req: Request, res: Response) => {
 
 // POST /api/models - 添加模型
 router.post('/', adminMiddleware, async (req: Request, res: Response) => {
-  const { id, owned_by, description, context_length, aliases, max_output_tokens, pricing, api_key, api_base_url, api_type, supported_features, require_api_key, icon, type } = req.body;
+  const { id, owned_by, description, context_length, aliases, max_output_tokens, pricing, api_key, api_base_url, api_type, api_url_templates, supported_features, require_api_key, icon, type } = req.body;
 
   if (!id) {
     return res.status(400).json({ error: 'Model ID is required' });
@@ -44,6 +44,7 @@ router.post('/', adminMiddleware, async (req: Request, res: Response) => {
       api_key,
       api_base_url,
       api_type,
+      api_url_templates,
       supported_features,
       require_api_key: require_api_key ?? true, // 默认需要 API Key
       icon,
@@ -61,7 +62,7 @@ router.put('/:id(*)', adminMiddleware, async (req: Request, res: Response) => {
   const id = decodeURIComponent(req.params.id as string);
   const { 
     newId, owned_by, description, context_length, aliases, max_output_tokens, 
-    pricing, api_key, api_base_url, api_type, forwardModelName, supported_features, 
+    pricing, api_key, api_base_url, api_type, api_url_templates, forwardModelName, supported_features,
     require_api_key, icon, allowManualReply,
     rpm, tpm, maxConcurrentRequests, concurrentQueues, allowOveruse
   } = req.body;
@@ -85,6 +86,7 @@ router.put('/:id(*)', adminMiddleware, async (req: Request, res: Response) => {
       api_key,
       api_base_url,
       api_type,
+      api_url_templates,
       forwardModelName,
       supported_features,
       require_api_key,
