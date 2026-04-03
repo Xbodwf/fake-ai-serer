@@ -66,7 +66,18 @@ export function UserDashboard() {
   }
 
   return (
-    <Container maxWidth="lg" sx={{ py: 4 }}>
+    <Box sx={{ 
+      height: '100%', 
+      display: 'flex', 
+      flexDirection: 'column',
+      overflow: 'hidden',
+    }}>
+      <Box sx={{ 
+        flex: 1, 
+        overflow: 'auto',
+        p: { xs: 2, sm: 3 },
+      }}>
+        <Container maxWidth="lg" sx={{ py: 2 }}>
       {/* 头部 */}
       <Box sx={{ mb: 4 }}>
         <Typography variant="h4" sx={{ fontWeight: 600, mb: 1 }}>
@@ -136,7 +147,7 @@ export function UserDashboard() {
           <Typography variant="h6" sx={{ fontWeight: 600, mb: 2 }}>
             {t('dashboard.quickActions')}
           </Typography>
-          <Stack direction="row" spacing={2} sx={{ flexWrap: 'wrap' }}>
+          <Stack direction="row" spacing={2} sx={{ flexWrap: 'wrap', rowGap: 1 }}>
             <Button
               variant="contained"
               onClick={() => navigate('/keys')}
@@ -190,19 +201,19 @@ export function UserDashboard() {
           </Typography>
           <Divider sx={{ mb: 2 }} />
           <Stack spacing={1}>
-            <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', rowGap: 0.5, columnGap: 1 }}>
               <Typography color="textSecondary">{t('auth.username')}:</Typography>
               <Typography>{user?.username}</Typography>
             </Box>
-            <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', rowGap: 0.5, columnGap: 1 }}>
               <Typography color="textSecondary">{t('auth.email')}:</Typography>
               <Typography>{user?.email}</Typography>
             </Box>
-            <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', rowGap: 0.5, columnGap: 1 }}>
               <Typography color="textSecondary">{t('common.role')}:</Typography>
               <Typography sx={{ textTransform: 'capitalize' }}>{user?.role}</Typography>
             </Box>
-            <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', rowGap: 0.5, columnGap: 1 }}>
               <Typography color="textSecondary">{t('common.status')}:</Typography>
               <Typography sx={{ color: user?.enabled ? 'success.main' : 'error.main' }}>
                 {user?.enabled ? t('common.active') : t('common.disabled')}
@@ -211,6 +222,8 @@ export function UserDashboard() {
           </Stack>
         </CardContent>
       </Card>
-    </Container>
+        </Container>
+      </Box>
+    </Box>
   );
 }

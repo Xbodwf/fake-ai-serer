@@ -245,9 +245,20 @@ export function UserBillingPage() {
  }
 
  return (
- <Container maxWidth="lg" sx={{ py:4 }}>
- <Box sx={{ mb:4 }}>
- <Typography variant="h4" sx={{ fontWeight:600, mb:1 }}>
+ <Box sx={{ 
+      height: '100%', 
+      display: 'flex', 
+      flexDirection: 'column',
+      overflow: 'hidden',
+    }}>
+      <Box sx={{ 
+        flex: 1, 
+        overflow: 'auto',
+        p: { xs: 2, sm: 3 },
+      }}>
+ <Box sx={{ maxWidth: '100%', overflow: 'hidden' }}>
+ <Box sx={{ mb: 3 }}>
+ <Typography variant="h4" sx={{ fontWeight:600, mb:1, fontSize: { xs: '1.5rem', sm: '2rem' } }}>
  {t('billing.title')}
  </Typography>
  <Typography variant="body2" sx={{ color: 'text.secondary' }}>
@@ -261,7 +272,7 @@ export function UserBillingPage() {
  </Alert>
  )}
 
- <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr1fr', md: '1fr1fr1fr' }, gap:3, mb:4 }}>
+ <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr', md: 'repeat(3, 1fr)' }, gap:3, mb:4 }}>
  <Card>
  <CardContent>
  <Typography color="textSecondary" gutterBottom>
@@ -277,7 +288,7 @@ export function UserBillingPage() {
  </Card>
  </Box>
 
- <Box sx={{ display: 'flex', gap:2, mb:4 }}>
+ <Box sx={{ display: 'flex', gap:2, mb:4, flexWrap: 'wrap' }}>
  <Button variant="contained" color="primary" onClick={() => setChargeDialogOpen(true)}>
  {t('billing.charge.button', 'Charge Balance')}
  </Button>
@@ -305,34 +316,34 @@ export function UserBillingPage() {
  </Box>
  ) : paymentOrders.length >0 ? (
  <TableContainer>
- <Table>
+ <Table size="small">
  <TableHead>
  <TableRow sx={{ backgroundColor: 'action.hover' }}>
- <TableCell>{t('billing.orders.orderNo', 'Order No.')}</TableCell>
- <TableCell>{t('billing.orders.type', 'Type')}</TableCell>
- <TableCell align="right">{t('billing.orders.amount', 'Amount')}</TableCell>
- <TableCell>{t('billing.orders.status', 'Status')}</TableCell>
- <TableCell>{t('billing.orders.createdAt', 'Created')}</TableCell>
- <TableCell>{t('billing.orders.paidAt', 'Paid At')}</TableCell>
+ <TableCell sx={{ fontSize: { xs: "0.7rem", sm: "0.875rem" }, padding: { xs: "6px 4px", sm: "16px" }, whiteSpace: 'nowrap' }}>{t('billing.orders.orderNo', 'Order No.')}</TableCell>
+ <TableCell sx={{ fontSize: { xs: "0.7rem", sm: "0.875rem" }, padding: { xs: "6px 4px", sm: "16px" }, whiteSpace: 'nowrap' }}>{t('billing.orders.type', 'Type')}</TableCell>
+ <TableCell align="right" sx={{ fontSize: { xs: "0.7rem", sm: "0.875rem" }, padding: { xs: "6px 4px", sm: "16px" }, whiteSpace: 'nowrap' }}>{t('billing.orders.amount', 'Amount')}</TableCell>
+ <TableCell sx={{ fontSize: { xs: "0.7rem", sm: "0.875rem" }, padding: { xs: "6px 4px", sm: "16px" }, whiteSpace: 'nowrap' }}>{t('billing.orders.status', 'Status')}</TableCell>
+ <TableCell sx={{ fontSize: { xs: "0.7rem", sm: "0.875rem" }, padding: { xs: "6px 4px", sm: "16px" }, whiteSpace: 'nowrap', display: { xs: 'none', sm: 'table-cell' } }}>{t('billing.orders.createdAt', 'Created')}</TableCell>
+ <TableCell sx={{ fontSize: { xs: "0.7rem", sm: "0.875rem" }, padding: { xs: "6px 4px", sm: "16px" }, whiteSpace: 'nowrap', display: { xs: 'none', sm: 'table-cell' } }}>{t('billing.orders.paidAt', 'Paid At')}</TableCell>
  </TableRow>
  </TableHead>
  <TableBody>
  {paymentOrders.map((order) => (
  <TableRow key={order.id}>
- <TableCell sx={{ fontFamily: 'monospace', fontSize: '0.85rem' }}>
- {order.outTradeNo.substring(0,20)}...
+ <TableCell sx={{ fontFamily: 'monospace', fontSize: { xs: "0.7rem", sm: "0.85rem" }, padding: { xs: "6px 4px", sm: "16px" } }}>
+ {order.outTradeNo.substring(0,16)}...
  </TableCell>
- <TableCell>
+ <TableCell sx={{ padding: { xs: "6px 4px", sm: "16px" } }}>
  <Chip label={getPaymentTypeLabel(order.type)} size="small" variant="outlined" />
  </TableCell>
- <TableCell align="right" sx={{ fontWeight:500 }}>
+ <TableCell align="right" sx={{ fontWeight:500, fontSize: { xs: "0.75rem", sm: "0.875rem" }, padding: { xs: "6px 4px", sm: "16px" } }}>
  {formatCurrency(order.money)}
  </TableCell>
- <TableCell>
+ <TableCell sx={{ padding: { xs: "6px 4px", sm: "16px" } }}>
  <Chip label={getStatusLabel(order.status)} color={getStatusColor(order.status)} size="small" />
  </TableCell>
- <TableCell>{new Date(order.createdAt).toLocaleString()}</TableCell>
- <TableCell>{order.paidAt ? new Date(order.paidAt).toLocaleString() : '-'}</TableCell>
+ <TableCell sx={{ fontSize: { xs: "0.75rem", sm: "0.875rem" }, padding: { xs: "6px 4px", sm: "16px" }, display: { xs: 'none', sm: 'table-cell' } }}>{new Date(order.createdAt).toLocaleString()}</TableCell>
+ <TableCell sx={{ fontSize: { xs: "0.75rem", sm: "0.875rem" }, padding: { xs: "6px 4px", sm: "16px" }, display: { xs: 'none', sm: 'table-cell' } }}>{order.paidAt ? new Date(order.paidAt).toLocaleString() : '-'}</TableCell>
  </TableRow>
  ))}
  </TableBody>
@@ -354,16 +365,16 @@ export function UserBillingPage() {
  {t('billing.invoices')}
  </Typography>
  {billingInfo && billingInfo.invoices.length >0 ? (
- <TableContainer>
- <Table>
+ <TableContainer sx={{ overflowX: 'auto' }}>
+ <Table sx={{}}>
  <TableHead>
  <TableRow sx={{ backgroundColor: 'action.hover' }}>
- <TableCell>{t('billing.period')}</TableCell>
+ <TableCell sx={{ fontSize: { xs: "0.75rem", sm: "0.875rem" }, padding: { xs: "8px 4px", sm: "16px" } }}>{t('billing.period')}</TableCell>
  <TableCell align="right">{t('billing.usage')}</TableCell>
  <TableCell align="right">{t('dashboard.totalCost')}</TableCell>
- <TableCell>{t('billing.status')}</TableCell>
- <TableCell>{t('billing.created')}</TableCell>
- <TableCell>{t('billing.dueDate')}</TableCell>
+ <TableCell sx={{ fontSize: { xs: "0.75rem", sm: "0.875rem" }, padding: { xs: "8px 4px", sm: "16px" } }}>{t('billing.status')}</TableCell>
+ <TableCell sx={{ fontSize: { xs: "0.75rem", sm: "0.875rem" }, padding: { xs: "8px 4px", sm: "16px" } }}>{t('billing.created')}</TableCell>
+ <TableCell sx={{ fontSize: { xs: "0.75rem", sm: "0.875rem" }, padding: { xs: "8px 4px", sm: "16px" } }}>{t('billing.dueDate')}</TableCell>
  </TableRow>
  </TableHead>
  <TableBody>
@@ -372,7 +383,7 @@ export function UserBillingPage() {
  <TableCell sx={{ fontWeight:500 }}>{invoice.period}</TableCell>
  <TableCell align="right">{invoice.totalUsage}</TableCell>
  <TableCell align="right">{formatCurrency(invoice.totalCost)}</TableCell>
- <TableCell>
+ <TableCell sx={{ fontSize: { xs: "0.75rem", sm: "0.875rem" }, padding: { xs: "8px 4px", sm: "16px" } }}>
  <Chip
  label={getStatusLabel(invoice.status)}
  color={getStatusColor(invoice.status)}
@@ -380,8 +391,8 @@ export function UserBillingPage() {
  sx={{ textTransform: 'capitalize' }}
  />
  </TableCell>
- <TableCell>{new Date(invoice.createdAt).toLocaleDateString()}</TableCell>
- <TableCell>{new Date(invoice.dueDate).toLocaleDateString()}</TableCell>
+ <TableCell sx={{ fontSize: { xs: "0.75rem", sm: "0.875rem" }, padding: { xs: "8px 4px", sm: "16px" } }}>{new Date(invoice.createdAt).toLocaleDateString()}</TableCell>
+ <TableCell sx={{ fontSize: { xs: "0.75rem", sm: "0.875rem" }, padding: { xs: "8px 4px", sm: "16px" } }}>{new Date(invoice.dueDate).toLocaleDateString()}</TableCell>
  </TableRow>
  ))}
  </TableBody>
@@ -463,7 +474,7 @@ export function UserBillingPage() {
  <Typography variant="body2" sx={{ mb: 1, color: 'text.secondary' }}>
  {t('billing.charge.quickAmount', 'Quick Amount')}
  </Typography>
- <Stack direction="row" spacing={1}>
+ <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap', rowGap: 1 }}>
  {['5', '10', '50', '100'].map((amount) => (
  <Button
  key={amount}
@@ -511,6 +522,8 @@ export function UserBillingPage() {
  </Button>
  </DialogActions>
  </Dialog>
- </Container>
+ </Box>
+      </Box>
+    </Box>
  );
 }

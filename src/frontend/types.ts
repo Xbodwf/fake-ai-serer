@@ -35,6 +35,70 @@ export interface ApiUrlTemplates {
   geminiEmbedContent?: string;
 }
 
+export interface ProviderApiKey {
+ id: string;
+ name: string;
+ key: string;
+ enabled: boolean;
+ lastUsedAt?: number;
+}
+
+export interface ProviderProxyConfig {
+ enabled: boolean;
+ protocol: 'http' | 'https';
+ host: string;
+ port: number;
+ username?: string;
+ password?: string;
+}
+
+export interface Provider {
+ id: string;
+ name: string;
+ slug: string;
+ description?: string;
+ enabled: boolean;
+ api_type: 'openai' | 'anthropic' | 'google' | 'azure' | 'custom';
+ api_base_url: string;
+ api_url_templates?: ApiUrlTemplates;
+ defaultHeaders?: Record<string, string>;
+ proxy?: ProviderProxyConfig;
+ keys: ProviderApiKey[];
+ rrCursor?: number;
+ createdAt: number;
+ updatedAt: number;
+}
+
+export interface Node {
+ id: string;
+ name: string;
+ key?: string;
+ description?: string;
+ enabled: boolean;
+ status: 'offline' | 'online';
+ capabilities?: string[];
+ tags?: string[];
+ lastSeenAt?: number;
+ tokenVersion: number;
+ createdAt: number;
+ updatedAt: number;
+}
+
+export interface NodeStatusResponse {
+ id: string;
+ enabled: boolean;
+ status: 'offline' | 'online';
+ lastSeenAt?: number;
+ tokenVersion: number;
+ connected: boolean;
+}
+
+export interface NodeTokenResponse {
+ nodeId: string;
+ tokenVersion: number;
+ token: string;
+}
+
 export interface Model {
   id: string;
   object: 'model';
@@ -75,9 +139,12 @@ export interface Model {
   concurrentQueues?: number;      // 同时进行队列数
   allowOveruse?: number;          // 允许超开倍率（0表示不允许）
 
-  api_key?: string;
-  api_base_url?: string;
+  // 转发配置
+  forwardingMode?: 'provider' | 'node' | 'none'; // 转发模式
+  providerId?: string;            // 关联提供商ID
+  nodeId?: string;                // 关联节点ID
   api_type?: 'openai' | 'anthropic' | 'google' | 'azure' | 'custom';
+  api_url_path?: string;          // 相对路径，如 /v1/chat/completions
   api_url_templates?: ApiUrlTemplates;
   forwardModelName?: string;      // 转发时使用的模型名称
   supported_features?: string[];

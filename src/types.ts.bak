@@ -577,7 +577,7 @@ export interface ModelsResponse {
 
 // WebSocket 消息类型
 export interface WSMessage {
-  type: 'request' | 'response' | 'stream' | 'stream_end' | 'connected' | 'models_update' | 'image_response' | 'video_response' | 'reverse-connect' | 'reverse-connect-ack' | 'reverse-disconnect' | 'node-connect-ack' | 'node-heartbeat' | 'http_request' | 'http_response' | 'error';
+  type: 'request' | 'response' | 'stream' | 'stream_end' | 'connected' | 'models_update' | 'image_response' | 'video_response' | 'reverse-connect' | 'reverse-connect-ack' | 'reverse-disconnect' | 'node-connect-ack' | 'node-heartbeat';
   payload: {
     requestId: string;
     data: ChatCompletionRequest;
@@ -594,57 +594,7 @@ export interface WSMessage {
     requestType?: 'chat' | 'image' | 'video';
     imageRequest?: ImageGenerationRequest;
     videoRequest?: VideoGenerationRequest;
-    // 完整的 HTTP 请求信息（用于节点转发）
-    httpRequest?: {
-      method: string;
-      path: string;
-      headers?: Record<string, string>;
-      body?: string;
-    };
   } | {
-    requestId: string;
-    content: string;
-  } | {
-    requestId: string;
-    images: Array<{ url?: string; b64_json?: string }>;
-  } | {
-    requestId: string;
-    videos: Array<{ url?: string; b64_json?: string }>;
-  } | {
-    message: string;
-  } | {
-    models: Model[];
-  } | {
-    clientId?: string;
-    capabilities?: string[];
-    maxConcurrentRequests?: number;
-  } | {
-    success: boolean;
-    clientId: string;
-    message?: string;
-  } | {
-    success: boolean;
-    nodeId: string;
-    message?: string;
-    serverTime?: number;
-  } | {
-    requestId: string;
-    // HTTP 响应信息
-    httpResponse?: {
-      status: number;
-      headers?: Record<string, string>;
-      body?: string;
-    };
-  } | {
-    // 错误响应
-    requestId: string;
-    error?: {
-      message: string;
-      type?: string;
-      code?: string;
-    };
-  };
-} | {
     requestId: string;
     content: string;
   } | {

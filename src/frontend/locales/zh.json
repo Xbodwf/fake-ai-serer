@@ -14,6 +14,7 @@
       "logout": "退出登录",
       "name": "名称",
       "email": "邮箱",
+      "description": "描述",
       "status": "状态",
       "actions": "操作",
       "created": "创建时间",
@@ -95,6 +96,8 @@
     "loginSettings": "登录设置",
     "notifications": "通知管理",
     "redeemCodes": "兑换码",
+    "providers": "提供商",
+    "nodes": "节点",
     "menu": "菜单",
     "invitation": "邀请管理"
   },
@@ -105,10 +108,38 @@
     "billing": "账单",
     "profile": "个人资料",
     "actions": "Actions",
+    "chat": "聊天",
     "requests": "请求队列",
     "adminConsole": "管理员控制台",
     "invitation": "邀请管理",
     "account": "账户"
+  },
+  "chat": {
+    "newSession": "新对话",
+    "selectSession": "选择对话",
+    "welcome": "开始新对话",
+    "welcomeDesc": "点击左侧按钮创建新对话",
+    "inputPlaceholder": "输入消息...",
+    "settings": "设置",
+    "delete": "删除",
+    "sessionSettings": "对话设置",
+    "title": "标题",
+    "model": "模型",
+    "apiType": "API 类型",
+    "stream": "流式输出",
+    "systemPrompt": "系统提示词",
+    "systemPromptHelper": "设置 AI 的角色和行为",
+    "uploadFiles": "上传文件",
+    "maxFileCount": "最多上传 {{count}} 个文件",
+    "maxFileSize": "单文件最大 {{size}}MB",
+    "maxTotalSize": "总大小不超过 {{size}}MB",
+    "fileTypeNotSupported": "文件类型不支持",
+    "fileTooLarge": "文件过大",
+    "copy": "复制",
+    "edit": "编辑",
+    "resend": "重新发送",
+    "editPlaceholder": "编辑消息...",
+    "send": "发送"
   },
   "adminNav": {
     "dashboard": "仪表板",
@@ -203,7 +234,17 @@
       "apiBaseUrlHelper": "留空则不转发，直接模拟响应",
       "supportedFeatures": "支持的功能",
       "featuresPlaceholder": "例如: chat, vision, function_calling",
-      "configuredApiKey": "已配置转发"
+      "configuredApiKey": "已配置转发",
+      "forwardingMode": "转发模式",
+      "forwardingNone": "无转发（模拟响应）",
+      "forwardingProvider": "通过提供商转发",
+      "forwardingNode": "通过节点转发",
+      "selectProvider": "选择提供商",
+      "selectNode": "选择节点",
+      "noProviders": "暂无提供商，请先添加",
+      "noNodes": "暂无节点，请先添加",
+      "apiUrlPath": "API 相对路径",
+      "apiUrlPathHelper": "相对于提供商/节点配置的 Base URL"
     }
   },
   "admin": {
@@ -735,5 +776,86 @@
     "queryParams": "查询参数：search、role、enabled、sortBy、sortOrder",
     "notificationsAdmin": "通知（仅限管理员）",
     "createNotification": "创建通知"
+  },
+  "providers": {
+    "title": "提供商管理",
+    "description": "管理 API 提供商及其密钥",
+    "createButton": "添加提供商",
+    "createTitle": "创建提供商",
+    "editTitle": "编辑提供商",
+    "noProviders": "暂无提供商",
+    "confirmDelete": "确定要删除此提供商吗？",
+    "createSuccess": "提供商创建成功",
+    "updateSuccess": "提供商更新成功",
+    "deleteSuccess": "提供商删除成功",
+    "validation": {
+      "requiredFields": "请填写所有必填字段"
+    },
+    "form": {
+      "id": "提供商 ID",
+      "idHelper": "唯一标识符，创建后不可修改",
+      "slug": "标识符",
+      "slugHelper": "用于 API 调用的短标识",
+      "apiType": "API 类型",
+      "apiBaseUrl": "API Base URL"
+    },
+    "keys": {
+      "title": "API Keys",
+      "addButton": "添加 Key",
+      "createTitle": "添加 API Key",
+      "editTitle": "编辑 API Key",
+      "noKeys": "暂无 API Key",
+      "keyId": "Key ID",
+      "keyIdHelper": "唯一标识符",
+      "keyValue": "Key 值",
+      "keyValueHelper": "API 密钥内容",
+      "lastUsed": "最后使用",
+      "confirmDelete": "确定要删除此 API Key 吗？",
+      "createSuccess": "API Key 添加成功",
+      "updateSuccess": "API Key 更新成功",
+      "deleteSuccess": "API Key 删除成功",
+      "validation": {
+        "requiredFields": "请填写所有必填字段"
+      }
+    }
+  },
+  "nodes": {
+    "title": "节点管理",
+    "description": "管理连接的服务节点",
+    "createButton": "添加节点",
+    "createTitle": "创建节点",
+    "editTitle": "编辑节点",
+    "noNodes": "暂无节点",
+    "nodeId": "节点 ID",
+    "nodeKey": "节点 Key",
+    "connectionStatus": "连接状态",
+    "connected": "已连接",
+    "disconnected": "未连接",
+    "capabilities": "能力",
+    "capabilitiesHelper": "用逗号分隔多个能力",
+    "tags": "标签",
+    "tagsHelper": "用逗号分隔多个标签",
+    "lastSeen": "最后在线",
+    "confirmDelete": "确定要删除此节点吗？",
+    "createSuccess": "节点创建成功",
+    "updateSuccess": "节点更新成功",
+    "deleteSuccess": "节点删除成功",
+    "validation": {
+      "requiredFields": "请填写所有必填字段"
+    },
+    "form": {
+      "id": "节点 ID",
+      "idHelper": "唯一标识符，创建后不可修改"
+    },
+    "token": {
+      "title": "节点 Token",
+      "showToken": "查看 Token",
+      "rotateToken": "轮换 Token",
+      "nodeId": "节点 ID",
+      "version": "Token 版本",
+      "token": "Token",
+      "warning": "请妥善保存此 Token，关闭后将无法再次查看完整内容",
+      "failed": "获取 Token 失败"
+    }
   }
 }

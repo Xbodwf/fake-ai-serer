@@ -143,7 +143,7 @@ export function UserInvitationPage() {
   const isUnlimited = invitationInfo.availableQuota === 'unlimited';
 
   return (
-    <Container maxWidth="lg" sx={{ py: 4 }}>
+    <Container maxWidth="lg" sx={{ px: { xs: 1, sm: 2, md: 3 }, py: 4 }}>
       <Box sx={{ mb: 4 }}>
         <Typography variant="h4" sx={{ fontWeight: 600, mb: 1 }}>
           {t('invitation.title')}
@@ -223,7 +223,7 @@ export function UserInvitationPage() {
             )}
           </Box>
 
-          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={4}>
+          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={4} sx={{ flexWrap: 'wrap' }}>
             <Box>
               <Typography variant="body2" sx={{ color: 'text.secondary', mb: 1 }}>
                 {t('invitation.availableQuota')}
@@ -277,21 +277,21 @@ export function UserInvitationPage() {
               <Typography>{t('invitation.noInvitedUsers')}</Typography>
             </Box>
           ) : (
-            <TableContainer component={Paper} variant="outlined">
-              <Table>
+            <TableContainer component={Paper} variant="outlined" sx={{ overflowX: 'auto' }}>
+              <Table sx={{}}>
                 <TableHead>
                   <TableRow>
-                    <TableCell>{t('invitation.username')}</TableCell>
-                    <TableCell>{t('invitation.email')}</TableCell>
-                    <TableCell>{t('invitation.invitedAt')}</TableCell>
+                    <TableCell sx={{ fontSize: { xs: "0.75rem", sm: "0.875rem" }, padding: { xs: "8px 4px", sm: "16px" } }}>{t('invitation.username')}</TableCell>
+                    <TableCell sx={{ fontSize: { xs: "0.75rem", sm: "0.875rem" }, padding: { xs: "8px 4px", sm: "16px" } }}>{t('invitation.email')}</TableCell>
+                    <TableCell sx={{ fontSize: { xs: "0.75rem", sm: "0.875rem" }, padding: { xs: "8px 4px", sm: "16px" } }}>{t('invitation.invitedAt')}</TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
                   {invitationInfo.invitedUsers.map((invitedUser) => (
                     <TableRow key={invitedUser.id}>
-                      <TableCell>{invitedUser.inviteeUsername}</TableCell>
-                      <TableCell>{invitedUser.inviteeEmail}</TableCell>
-                      <TableCell>{formatDateDisplay(invitedUser.createdAt)}</TableCell>
+                      <TableCell sx={{ fontSize: { xs: "0.75rem", sm: "0.875rem" }, padding: { xs: "8px 4px", sm: "16px" } }}>{invitedUser.inviteeUsername}</TableCell>
+                      <TableCell sx={{ fontSize: { xs: "0.75rem", sm: "0.875rem" }, padding: { xs: "8px 4px", sm: "16px" } }}>{invitedUser.inviteeEmail}</TableCell>
+                      <TableCell sx={{ fontSize: { xs: "0.75rem", sm: "0.875rem" }, padding: { xs: "8px 4px", sm: "16px" } }}>{formatDateDisplay(invitedUser.createdAt)}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>

@@ -12,3 +12,5 @@ export * as actionsDB from './actions';
 export * as notificationsDB from './notifications';
 export * as invitationsDB from './invitations';
 export * as paymentOrdersDB from './paymentOrders';
+export * as providersDB from './providers';
+export * as nodesDB from './nodes';

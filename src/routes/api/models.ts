@@ -1,6 +1,12 @@
 import { Router, Request, Response } from 'express';
 import type { Router as RouterType } from 'express';
-import { getModel, getAllModels, addModel as storageAddModel, updateModel as storageUpdateModel, deleteModel as storageDeleteModel } from '../../storage.js';
+import {
+  getModel,
+  getAllModels,
+  addModel as storageAddModel,
+  updateModel as storageUpdateModel,
+  deleteModel as storageDeleteModel,
+} from '../../storage.js';
 import { broadcastModelsUpdate } from '../../websocket.js';
 import { adminMiddleware } from '../../middleware.js';
 
@@ -11,14 +17,37 @@ router.get('/', (req: Request, res: Response) => {
   const models = getAllModels();
 
   res.json({
-    models: models,
-    data: models // 兼容两种格式
+    models,
+    data: models, // 兼容两种格式
   });
 });
 
 // POST /api/models - 添加模型
 router.post('/', adminMiddleware, async (req: Request, res: Response) => {
-  const { id, owned_by, description, context_length, aliases, max_output_tokens, pricing, api_key, api_base_url, api_type, api_url_templates, forwardModelName, supported_features, require_api_key, icon, type } = req.body;
+  const {
+    id,
+    owned_by,
+    description,
+    context_length,
+    aliases,
+    max_output_tokens,
+    pricing,
+    api_type,
+    api_url_path,
+    api_url_templates,
+    forwardModelName,
+    supported_features,
+    require_api_key,
+    icon,
+    type,
+    forwardingMode,
+    providerId,
+    nodeId,
+    providerUid,
+    commissionRatio,
+  } = req.body;
+
+  console.log('[Model API] POST /api/models - api_url_path:', api_url_path);
 
   if (!id) {
     return res.status(400).json({ error: 'Model ID is required' });
@@ -41,19 +70,24 @@ router.post('/', adminMiddleware, async (req: Request, res: Response) => {
       aliases,
       max_output_tokens,
       pricing,
-      api_key,
-      api_base_url,
       api_type,
+      api_url_path,
       api_url_templates,
       forwardModelName,
       supported_features,
       require_api_key: require_api_key ?? true, // 默认需要 API Key
       icon,
       type,
+      forwardingMode,
+      providerId,
+      nodeId,
+      providerUid,
+      commissionRatio,
     });
+    console.log('[Model API] Created model - api_url_path:', newModel.api_url_path);
     broadcastModelsUpdate(getAllModels());
     res.json({ success: true, model: newModel });
-  } catch (e) {
+  } catch {
     res.status(500).json({ error: 'Failed to add model' });
   }
 });
@@ -61,12 +95,35 @@ router.post('/', adminMiddleware, async (req: Request, res: Response) => {
 // PUT /api/models/:id(*) - 更新模型（支持模型ID包含"/"）
 router.put('/:id(*)', adminMiddleware, async (req: Request, res: Response) => {
   const id = decodeURIComponent(req.params.id as string);
-  const { 
-    newId, owned_by, description, context_length, aliases, max_output_tokens, 
-    pricing, api_key, api_base_url, api_type, api_url_templates, forwardModelName, supported_features,
-    require_api_key, icon, allowManualReply,
-    rpm, tpm, maxConcurrentRequests, concurrentQueues, allowOveruse
+  const {
+    newId,
+    owned_by,
+    description,
+    context_length,
+    aliases,
+    max_output_tokens,
+    pricing,
+    api_type,
+    api_url_path,
+    api_url_templates,
+    forwardModelName,
+    supported_features,
+    require_api_key,
+    icon,
+    allowManualReply,
+    rpm,
+    tpm,
+    maxConcurrentRequests,
+    concurrentQueues,
+    allowOveruse,
+    forwardingMode,
+    providerId,
+    nodeId,
+    providerUid,
+    commissionRatio,
   } = req.body;
+
+  console.log('[Model API] PUT /api/models/' + id + ' - api_url_path:', api_url_path);
 
   try {
     // 如果要修改ID，先检查新ID是否已存在
@@ -84,9 +141,8 @@ router.put('/:id(*)', adminMiddleware, async (req: Request, res: Response) => {
       aliases,
       max_output_tokens,
       pricing,
-      api_key,
-      api_base_url,
       api_type,
+      api_url_path,
       api_url_templates,
       forwardModelName,
       supported_features,
@@ -98,15 +154,22 @@ router.put('/:id(*)', adminMiddleware, async (req: Request, res: Response) => {
       maxConcurrentRequests,
       concurrentQueues,
       allowOveruse,
+      forwardingMode,
+      providerId,
+      nodeId,
+      providerUid,
+      commissionRatio,
     });
 
     if (!updated) {
       return res.status(404).json({ error: 'Model not found' });
     }
 
+    console.log('[Model API] Updated model - api_url_path:', updated.api_url_path);
+
     broadcastModelsUpdate(getAllModels());
     res.json({ success: true, model: updated });
-  } catch (e) {
+  } catch {
     res.status(500).json({ error: 'Failed to update model' });
   }
 });
@@ -122,7 +185,7 @@ router.delete('/:id(*)', adminMiddleware, async (req: Request, res: Response) =>
     }
     broadcastModelsUpdate(getAllModels());
     res.json({ success: true });
-  } catch (e) {
+  } catch {
     res.status(500).json({ error: 'Failed to delete model' });
   }
 });

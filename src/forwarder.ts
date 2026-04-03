@@ -2,6 +2,16 @@ import axios from 'axios';
 import type { ChatCompletionRequest, Model } from './types.js';
 import type { Response } from 'express';
 import { generateRequestId } from './responseBuilder.js';
+import { getProviderById, getNodeById } from './storage.js';
+
+/**
+ * 部分隐藏 key，只显示前4位和后4位
+ */
+export function hideKey(key: string): string {
+  if (!key) return '(none)';
+  if (key.length <= 8) return '****';
+  return `${key.substring(0, 4)}...${key.substring(key.length - 4)}`;
+}
 
 /**
  * 标准化 API 错误响应格式
@@ -79,6 +89,33 @@ export function standardizeErrorResponse(error: any, apiType: string = 'unknown'
 }
 
 /**
+ * 获取模型的有效 API key（支持 provider 模式）
+ */
+function getEffectiveApiKey(model: Model): string {
+ let effectiveApiKey = model.api_key || '';
+ 
+ if (model.forwardingMode === 'provider' && model.providerId) {
+ const provider = getProviderById(model.providerId);
+ if (provider && provider.keys && provider.keys.length > 0) {
+ const enabledKeys = provider.keys.filter(k => k.enabled);
+ if (enabledKeys.length > 0) {
+ const idx = (provider.rrCursor || 0) % enabledKeys.length;
+ effectiveApiKey = enabledKeys[idx].key || effectiveApiKey;
+ }
+ }
+ }
+ 
+ return effectiveApiKey;
+}
+
+/**
+ * 检查模型是否应该通过节点转发
+ */
+export function shouldUseNodeForwarding(model: Model): boolean {
+ return model.forwardingMode === 'node' && !!model.nodeId;
+}
+
+/**
  * 获取转发时使用的模型名称
  */
 export function getForwardModelName(model: Model, requestedModel: string): string {
@@ -92,6 +129,21 @@ function hasUrlTemplateConfigured(model: Model): boolean {
 }
 
 export function isModelForwardingConfigured(model: Model): boolean {
+ // 如果是节点转发模式，检查节点是否在线
+ if (model.forwardingMode === 'node' && model.nodeId) {
+ const node = getNodeById(model.nodeId);
+ return node?.status === 'online';
+ }
+ 
+ // 如果是 provider 转发模式，检查 provider 是否配置
+ if (model.forwardingMode === 'provider' && model.providerId) {
+ const provider = getProviderById(model.providerId);
+ if (provider && provider.keys && provider.keys.some(k => k.enabled)) {
+ return true;
+ }
+ }
+ 
+ // 兼容旧的配置方式
  return !!model.api_key && (!!model.api_base_url || hasUrlTemplateConfigured(model));
 }
 
@@ -169,47 +221,108 @@ export function resolveForwardUrl(
  requestedModel: string,
  forwardModel: string
 ): string {
- if (!model.api_key) {
+ // 从 model 或 provider 或 node 获取配置
+ let effectiveBaseUrl = model.api_base_url || '';
+ let effectiveApiKey = model.api_key || '';
+
+ // 如果 model 已经有 api_key 和 api_base_url，直接使用（可能是 runtimeModel）
+ const hasRuntimeConfig = model.api_key && model.api_base_url;
+
+ // 如果配置了 provider 且没有 runtime config，从 provider 获取 base URL 和 key
+ if (!hasRuntimeConfig && model.forwardingMode === 'provider' && model.providerId) {
+ const provider = getProviderById(model.providerId);
+ if (provider) {
+ effectiveBaseUrl = provider.api_base_url || effectiveBaseUrl;
+ // 使用 provider 的 key（轮询选择）
+ if (provider.keys && provider.keys.length > 0) {
+ const enabledKeys = provider.keys.filter(k => k.enabled);
+ if (enabledKeys.length > 0) {
+ // 简单轮询
+ const idx = (provider.rrCursor || 0) % enabledKeys.length;
+ effectiveApiKey = enabledKeys[idx].key || effectiveApiKey;
+ }
+ }
+ }
+ }
+ 
+ // 如果配置了 node，从 node 获取信息（节点通过 WebSocket 连接，不需要 base URL）
+ if (model.forwardingMode === 'node' && model.nodeId) {
+ const node = getNodeById(model.nodeId);
+ if (node && node.status === 'online') {
+ // 节点模式下，应该通过 WebSocket 转发，不应该到达这里
+ throw new Error('Node forwarding should use WebSocket, not HTTP');
+ }
+ throw new Error(`Node ${model.nodeId} is not online`);
+ }
+
+ if (!effectiveApiKey) {
  throw new Error('Model not configured for forwarding: missing api_key');
  }
 
- const template = getEndpointTemplate(model, endpoint);
- const baseUrl = normalizeBaseUrl(model.api_base_url || '');
+ // 优先使用 api_url_path
+ const api_url_path = model.api_url_path;
+ const baseUrl = normalizeBaseUrl(effectiveBaseUrl || '');
 
+ // 如果有 api_url_path，直接拼接
+ if (api_url_path && api_url_path.trim()) {
+ const trimmedPath = api_url_path.trim();
+ const normalizedPath = trimmedPath.startsWith('/') ? trimmedPath : `/${trimmedPath}`;
+ return `${baseUrl}${normalizedPath}`;
+ }
+
+ // 兼容旧的 api_url_templates
+ const template = getEndpointTemplate(model, endpoint);
+
+ // 如果模板是相对路径（以 / 开头或不包含 ://），需要 baseUrl
  if (template && template.trim()) {
- return applyUrlTemplate(template.trim(), {
+ const trimmedTemplate = template.trim();
+ 
+ // 检测相对路径：以 / 开头或不包含协议
+ const isRelativeUrl = trimmedTemplate.startsWith('/') || !trimmedTemplate.includes('://');
+ 
+ if (isRelativeUrl) {
+ if (!baseUrl) {
+ throw new Error(`Relative URL template "${trimmedTemplate}" requires a base URL from provider`);
+ }
+ // 确保路径以 / 开头
+ const normalizedPath = trimmedTemplate.startsWith('/') ? trimmedTemplate : `/${trimmedTemplate}`;
+ return `${baseUrl}${normalizedPath}`;
+ }
+ 
+ // 绝对 URL 模板
+ return applyUrlTemplate(trimmedTemplate, {
  baseUrl,
  requestedModel,
  forwardModel,
- apiKey: model.api_key,
+ apiKey: effectiveApiKey,
  });
  }
 
- if (!model.api_base_url) {
+ if (!baseUrl) {
  throw new Error(`Model not configured for forwarding endpoint: ${endpoint}`);
  }
 
  switch (endpoint) {
  case 'chat':
- return model.api_base_url.includes('/chat/completions')
- ? model.api_base_url
- : appendPath(model.api_base_url, '/chat/completions');
+ return baseUrl.includes('/chat/completions')
+ ? baseUrl
+ : appendPath(baseUrl, '/chat/completions');
  case 'embeddings':
- return model.api_base_url.includes('/embeddings')
- ? model.api_base_url
- : appendPath(model.api_base_url, '/embeddings');
+ return baseUrl.includes('/embeddings')
+ ? baseUrl
+ : appendPath(baseUrl, '/embeddings');
  case 'rerank':
- return model.api_base_url.includes('/rerank')
- ? model.api_base_url
- : appendPath(model.api_base_url, '/rerank');
+ return baseUrl.includes('/rerank')
+ ? baseUrl
+ : appendPath(baseUrl, '/rerank');
  case 'anthropicMessages':
- return appendPath(model.api_base_url, '/v1/messages');
+ return appendPath(baseUrl, '/v1/messages');
  case 'geminiGenerateContent':
- return `${baseUrl}/v1beta/models/${encodeURIComponent(forwardModel)}:generateContent?key=${encodeURIComponent(model.api_key)}`;
+ return `${baseUrl}/v1beta/models/${encodeURIComponent(forwardModel)}:generateContent?key=${encodeURIComponent(effectiveApiKey)}`;
  case 'geminiStreamGenerateContent':
- return `${baseUrl}/v1beta/models/${encodeURIComponent(forwardModel)}:streamGenerateContent?key=${encodeURIComponent(model.api_key)}&alt=sse`;
+ return `${baseUrl}/v1beta/models/${encodeURIComponent(forwardModel)}:streamGenerateContent?key=${encodeURIComponent(effectiveApiKey)}&alt=sse`;
  case 'geminiEmbedContent':
- return `${baseUrl}/v1beta/models/${encodeURIComponent(forwardModel)}:embedContent?key=${encodeURIComponent(model.api_key)}`;
+ return `${baseUrl}/v1beta/models/${encodeURIComponent(forwardModel)}:embedContent?key=${encodeURIComponent(effectiveApiKey)}`;
  default:
  throw new Error(`Unsupported forwarding endpoint: ${endpoint}`);
  }
@@ -270,6 +383,7 @@ export async function forwardEmbeddingsRequest(
 
     if (apiType === 'google') {
       const url = resolveForwardUrl(model, 'geminiEmbedContent', requestedModel, forwardModel);
+      console.log(`[Forwarder] Embeddings 转发 URL: ${url}`);
       const input = Array.isArray(body.input) ? body.input[0] : body.input;
       const googleBody = {
         model: `models/${forwardModel}`,
@@ -290,10 +404,14 @@ export async function forwardEmbeddingsRequest(
 
     const url = resolveForwardUrl(model, 'embeddings', requestedModel, forwardModel);
     const forwardBody = { ...body, model: forwardModel };
+    const apiKey = getEffectiveApiKey(model);
+
+    console.log(`[Forwarder] Embeddings 转发 URL: ${url}`);
+    console.log(`[Forwarder] API Key: ${hideKey(apiKey)}`);
 
     const response = await axios.post(url, forwardBody, {
       headers: {
-        'Authorization': `Bearer ${model.api_key}`,
+        'Authorization': `Bearer ${apiKey}`,
         'Content-Type': 'application/json',
       },
       timeout: 120000,
@@ -329,6 +447,10 @@ export async function forwardStreamRequest(
 
   const forwardModel = getForwardModelName(model, body.model);
   const url = resolveForwardUrl(model, 'chat', body.model, forwardModel);
+  const apiKey = getEffectiveApiKey(model);
+
+  console.log(`[Forwarder] 流式转发 URL: ${url}`);
+  console.log(`[Forwarder] API Key: ${hideKey(apiKey)}`);
 
   // 使用转发模型名称
   const forwardBody = { ...body, model: forwardModel };
@@ -370,16 +492,36 @@ export async function forwardStreamRequest(
 
   const response = await axios.post(url, forwardBody, {
     headers: {
-      'Authorization': `Bearer ${model.api_key}`,
+      'Authorization': `Bearer ${apiKey}`,
       'Content-Type': 'application/json',
     },
     timeout: 120000,
     responseType: 'stream',
+    maxContentLength: Infinity,
+    maxBodyLength: Infinity,
+    httpAgent: new (require('http').Agent)({ keepAlive: true }),
+    httpsAgent: new (require('https').Agent)({ keepAlive: true }),
+  });
+
+  let clientClosed = false;
+
+  // 监听客户端断开连接
+  res.on('close', () => {
+    if (!clientClosed) {
+      clientClosed = true;
+      console.log('[Forwarder] Client disconnected, stopping stream');
+      // 停止上游流
+      if (response.data && typeof response.data.destroy === 'function') {
+        response.data.destroy();
+      }
+    }
   });
 
   // 处理流数据，统一 id 格式
   let firstChunk = true;
   response.data.on('data', (chunk: Buffer) => {
+    if (clientClosed) return;
+    
     let chunkStr = chunk.toString();
     
     // 替换流中的 id 为统一格式
@@ -393,12 +535,16 @@ export async function forwardStreamRequest(
   });
 
   response.data.on('end', () => {
-    res.end();
+    if (!clientClosed) {
+      res.end();
+    }
   });
 
   response.data.on('error', (err: Error) => {
     console.error('[Forwarder] Stream error:', err.message);
-    res.end();
+    if (!clientClosed) {
+      res.end();
+    }
   });
 }
 
@@ -411,6 +557,10 @@ async function forwardToOpenAI(
 ): Promise<{ success: true; response: any }> {
   const forwardModel = getForwardModelName(model, body.model);
   const url = resolveForwardUrl(model, 'chat', body.model, forwardModel);
+  const apiKey = getEffectiveApiKey(model);
+
+  console.log(`[Forwarder] 转发 URL: ${url}`);
+  console.log(`[Forwarder] API Key: ${hideKey(apiKey)}`);
 
   // 使用转发模型名称
   const forwardBody = { ...body, model: forwardModel };
@@ -451,14 +601,25 @@ async function forwardToOpenAI(
     }
   }
 
-  const response = await axios.post(url, forwardBody, {
+  const axiosConfig: any = {
     headers: {
-      'Authorization': `Bearer ${model.api_key}`,
+      'Authorization': `Bearer ${apiKey}`,
       'Content-Type': 'application/json',
     },
     timeout: 120000, // 2 分钟超时
-    responseType: body.stream ? 'stream' : 'json',
-  });
+  };
+
+  if (body.stream) {
+    axiosConfig.responseType = 'stream';
+    axiosConfig.maxContentLength = Infinity;
+    axiosConfig.maxBodyLength = Infinity;
+    // 流式请求不设置 Content-Length
+    delete axiosConfig.headers['Content-Length'];
+  } else {
+    axiosConfig.responseType = 'json';
+  }
+
+  const response = await axios.post(url, forwardBody, axiosConfig);
 
   // 非流式响应：统一 id 格式
   if (!body.stream && response.data) {
@@ -478,6 +639,10 @@ async function forwardToAnthropic(
   // 使用转发模型名称
   const forwardModel = getForwardModelName(model, body.model);
   const url = resolveForwardUrl(model, 'anthropicMessages', body.model, forwardModel);
+  const apiKey = getEffectiveApiKey(model);
+
+  console.log(`[Forwarder] Anthropic 转发 URL: ${url}`);
+  console.log(`[Forwarder] API Key: ${hideKey(apiKey)}`);
 
   // 转换消息格式：OpenAI -> Anthropic
   const systemMessages = body.messages.filter(m => m.role === 'system');
@@ -496,15 +661,24 @@ async function forwardToAnthropic(
     system: systemMessages.length > 0 ? systemMessages[0].content : undefined,
   };
 
-  const response = await axios.post(url, anthropicBody, {
+  const axiosConfig: any = {
     headers: {
-      'x-api-key': model.api_key,
+      'x-api-key': apiKey,
       'anthropic-version': '2023-06-01',
       'Content-Type': 'application/json',
     },
     timeout: 120000,
-    responseType: body.stream ? 'stream' : 'json',
-  });
+  };
+
+  if (body.stream) {
+    axiosConfig.responseType = 'stream';
+    axiosConfig.maxContentLength = Infinity;
+    axiosConfig.maxBodyLength = Infinity;
+  } else {
+    axiosConfig.responseType = 'json';
+  }
+
+  const response = await axios.post(url, anthropicBody, axiosConfig);
 
   // 转换响应格式：Anthropic -> OpenAI
   if (!body.stream) {
@@ -545,6 +719,8 @@ async function forwardToGoogle(
 ): Promise<{ success: true; response: any }> {
   const forwardModel = getForwardModelName(model, body.model);
   const url = resolveForwardUrl(model, 'geminiGenerateContent', body.model, forwardModel);
+
+  console.log(`[Forwarder] Gemini 转发 URL: ${url}`);
 
   // 转换消息格式：OpenAI -> Google
   const contents = body.messages.map(m => ({
@@ -732,18 +908,36 @@ export async function forwardGeminiStreamRequest(
       responseType: 'stream',
     });
 
+    let clientClosed = false;
+
+    // 监听客户端断开连接
+    res.on('close', () => {
+      if (!clientClosed) {
+        clientClosed = true;
+        console.log('[Gemini Forwarder] Client disconnected, stopping stream');
+        if (response.data && typeof response.data.destroy === 'function') {
+          response.data.destroy();
+        }
+      }
+    });
+
     // 直接透传流数据
     response.data.on('data', (chunk: Buffer) => {
+      if (clientClosed) return;
       res.write(chunk);
     });
 
     response.data.on('end', () => {
-      res.end();
+      if (!clientClosed) {
+        res.end();
+      }
     });
 
     response.data.on('error', (err: Error) => {
       console.error('[Gemini Forwarder] 流式转发错误:', err.message);
-      res.end();
+      if (!clientClosed) {
+        res.end();
+      }
     });
     return;
   }
@@ -785,20 +979,36 @@ export async function forwardGeminiStreamRequest(
 
   // 2. 转发 OpenAI 格式请求
   const url = resolveForwardUrl(model, 'chat', model.id, forwardModel);
+  const apiKey = getEffectiveApiKey(model);
 
   const response = await axios.post(url, openaiBody, {
     headers: {
-      'Authorization': `Bearer ${model.api_key}`,
+      'Authorization': `Bearer ${apiKey}`,
       'Content-Type': 'application/json',
     },
     timeout: 120000,
     responseType: 'stream',
   });
 
+  let clientClosed = false;
+
+  // 监听客户端断开连接
+  res.on('close', () => {
+    if (!clientClosed) {
+      clientClosed = true;
+      console.log('[Gemini Forwarder] Client disconnected, stopping stream');
+      if (response.data && typeof response.data.destroy === 'function') {
+        response.data.destroy();
+      }
+    }
+  });
+
   // 3. 将 OpenAI 流式响应转换为 Gemini 格式
   let buffer = '';
   
   response.data.on('data', (chunk: Buffer) => {
+    if (clientClosed) return;
+    
     buffer += chunk.toString();
     const lines = buffer.split('\n');
     buffer = lines.pop() || '';
@@ -836,12 +1046,16 @@ export async function forwardGeminiStreamRequest(
   });
 
   response.data.on('end', () => {
-    res.write('data: [DONE]\n\n');
-    res.end();
+    if (!clientClosed) {
+      res.write('data: [DONE]\n\n');
+      res.end();
+    }
   });
 
   response.data.on('error', (err: Error) => {
     console.error('[Gemini Forwarder] 流式转换错误:', err.message);
-    res.end();
+    if (!clientClosed) {
+      res.end();
+    }
   });
 }

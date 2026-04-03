@@ -1,5 +1,5 @@
 import { join } from 'path';
-import type { Model, ApiKey, User, UsageRecord, Invoice, Action, Workflow, InvitationRecord, Notification } from './types.js';
+import type { Model, ApiKey, User, UsageRecord, Invoice, Action, Workflow, InvitationRecord, Notification, Provider, Node, ProviderApiKey } from './types.js';
 import { randomBytes } from 'crypto';
 import { connectDB, getDB, initializeIndexes } from './db/index.js';
 import * as modelsDB from './db/models.js';
@@ -10,6 +10,8 @@ import * as invoicesDB from './db/invoices.js';
 import * as actionsDB from './db/actions.js';
 import * as notificationsDB from './db/notifications.js';
 import * as invitationsDB from './db/invitations.js';
+import * as providersDB from './db/providers.js';
+import * as nodesDB from './db/nodes.js';
 
 const DATA_DIR = join(process.cwd(), 'data');
 const CONFIG_FILE = join(DATA_DIR, 'config.json');
@@ -22,6 +24,8 @@ let usageRecordsCache: UsageRecord[] = [];
 let invoicesCache: Invoice[] = [];
 let actionsCache: Action[] = [];
 let notificationsCache: Notification[] = [];
+let providersCache: Provider[] = [];
+let nodesCache: Node[] = [];
 
 export interface ServerConfig {
   port: number;
@@ -34,6 +38,10 @@ export interface SystemSettings {
   smoothOutput?: boolean;
   smoothSpeed?: number;
   emailVerificationEnabled?: boolean;
+ commission?: {
+ enabled?: boolean;
+ defaultRatio?: number;
+ };
   emailjs?: {
     serviceId: string;
     templateId: string;
@@ -654,6 +662,156 @@ export async function deleteNotification(id: string): Promise<boolean> {
 }
 
 // ==================== 额外的辅助函数 ====================
+
+// ==================== 节点管理 ====================
+
+export async function loadNodes(): Promise<Node[]> {
+ try {
+ nodesCache = await nodesDB.getAllNodes();
+ return nodesCache;
+ } catch (e) {
+ console.error('[Storage] Failed to load nodes:', e);
+ return [];
+ }
+}
+
+export function getAllNodes(): Node[] {
+ return nodesCache;
+}
+
+export function getNodeById(id: string): Node | undefined {
+ return nodesCache.find(n => n.id === id);
+}
+
+export function getNodeByKey(key: string): Node | undefined {
+ return nodesCache.find(n => n.key === key);
+}
+
+export async function addNode(node: Omit<Node, 'createdAt' | 'updatedAt' | 'status' | 'lastSeenAt'>): Promise<Node> {
+ const newNode = await nodesDB.createNode(node);
+ nodesCache.push(newNode);
+ return newNode;
+}
+
+export async function updateNode(id: string, updates: Partial<Node>): Promise<Node | null> {
+ const updated = await nodesDB.updateNodeById(id, updates);
+ if (updated) {
+ const index = nodesCache.findIndex(n => n.id === id);
+ if (index !== -1) nodesCache[index] = updated;
+ }
+ return updated;
+}
+
+export async function deleteNode(id: string): Promise<boolean> {
+ const deleted = await nodesDB.deleteNodeById(id);
+ if (deleted) {
+ nodesCache = nodesCache.filter(n => n.id !== id);
+ }
+ return deleted;
+}
+
+export async function touchNodeHeartbeat(id: string): Promise<Node | null> {
+ const updated = await nodesDB.touchNodeHeartbeat(id);
+ if (updated) {
+ const index = nodesCache.findIndex(n => n.id === id);
+ if (index !== -1) nodesCache[index] = updated;
+ }
+ return updated;
+}
+
+export async function markNodeOffline(id: string): Promise<void> {
+ await nodesDB.markNodeOffline(id);
+ const index = nodesCache.findIndex(n => n.id === id);
+ if (index !== -1) {
+ nodesCache[index] = {
+ ...nodesCache[index],
+ status: 'offline',
+ updatedAt: Date.now(),
+ };
+ }
+}
+
+// ==================== 提供商管理 ====================
+
+export async function loadProviders(): Promise<Provider[]> {
+ try {
+ providersCache = await providersDB.getAllProviders();
+ return providersCache;
+ } catch (e) {
+ console.error('[Storage] Failed to load providers:', e);
+ return [];
+ }
+}
+
+export function getAllProviders(): Provider[] {
+ return providersCache;
+}
+
+export function getProviderById(id: string): Provider | undefined {
+ return providersCache.find(p => p.id === id);
+}
+
+export async function addProvider(provider: Omit<Provider, 'createdAt' | 'updatedAt' | 'rrCursor'>): Promise<Provider> {
+ const newProvider = await providersDB.createProvider(provider);
+ providersCache.push(newProvider);
+ return newProvider;
+}
+
+export async function updateProvider(id: string, updates: Partial<Provider>): Promise<Provider | null> {
+ const updated = await providersDB.updateProviderById(id, updates);
+ if (updated) {
+ const index = providersCache.findIndex(p => p.id === id);
+ if (index !== -1) providersCache[index] = updated;
+ }
+ return updated;
+}
+
+export async function deleteProvider(id: string): Promise<boolean> {
+ const deleted = await providersDB.deleteProviderById(id);
+ if (deleted) {
+ providersCache = providersCache.filter(p => p.id !== id);
+ }
+ return deleted;
+}
+
+export async function addProviderKey(providerId: string, key: ProviderApiKey): Promise<Provider | null> {
+ const updated = await providersDB.addProviderKey(providerId, key);
+ if (updated) {
+ const index = providersCache.findIndex(p => p.id === providerId);
+ if (index !== -1) providersCache[index] = updated;
+ }
+ return updated;
+}
+
+export async function updateProviderKey(providerId: string, keyId: string, updates: Partial<ProviderApiKey>): Promise<Provider | null> {
+ const updated = await providersDB.updateProviderKey(providerId, keyId, updates);
+ if (updated) {
+ const index = providersCache.findIndex(p => p.id === providerId);
+ if (index !== -1) providersCache[index] = updated;
+ }
+ return updated;
+}
+
+export async function deleteProviderKey(providerId: string, keyId: string): Promise<Provider | null> {
+ const updated = await providersDB.deleteProviderKey(providerId, keyId);
+ if (updated) {
+ const index = providersCache.findIndex(p => p.id === providerId);
+ if (index !== -1) providersCache[index] = updated;
+ }
+ return updated;
+}
+
+export async function selectProviderKeyRoundRobin(providerId: string): Promise<{ provider: Provider; key: ProviderApiKey } | null> {
+ const selected = await providersDB.selectRoundRobinProviderKey(providerId);
+ if (!selected) return null;
+
+ const index = providersCache.findIndex(p => p.id === providerId);
+ if (index !== -1) {
+ providersCache[index] = selected.provider;
+ }
+
+ return selected;
+}
 
 // 获取用户创建的 Actions
 export function getActionsByCreator(userId: string): Action[] {

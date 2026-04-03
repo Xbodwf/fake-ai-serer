@@ -160,24 +160,36 @@ export function UserApiKeysPage() {
   }
 
   return (
-    <Container maxWidth="lg" sx={{ py: 4 }}>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 4 }}>
-        <Box>
-          <Typography variant="h4" sx={{ fontWeight: 600, mb: 1 }}>
-            {t('apiKeys.title')}
-          </Typography>
-          <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-            {t('apiKeys.description')}
-          </Typography>
-        </Box>
-        <Button
-          variant="contained"
-          startIcon={<Plus size={20} />}
-          onClick={() => setShowCreateDialog(true)}
-        >
-          {t('apiKeys.createKey')}
-        </Button>
-      </Box>
+    <Box sx={{ 
+      height: '100%', 
+      display: 'flex', 
+      flexDirection: 'column',
+      overflow: 'hidden',
+    }}>
+      <Box sx={{ 
+        flex: 1, 
+        overflow: 'auto',
+        p: { xs: 2, sm: 3 },
+      }}>
+        <Container maxWidth="lg" sx={{ px: { xs: 0, sm: 1 } }}>
+          <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, justifyContent: 'space-between', alignItems: { xs: 'flex-start', sm: 'center' }, mb: 3, gap: 2 }}>
+            <Box>
+              <Typography variant="h4" sx={{ fontWeight: 600, mb: 1, fontSize: { xs: '1.5rem', sm: '2rem' } }}>
+                {t('apiKeys.title')}
+              </Typography>
+              <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+                {t('apiKeys.description')}
+              </Typography>
+            </Box>
+            <Button
+              variant="contained"
+              startIcon={<Plus size={20} />}
+              onClick={() => setShowCreateDialog(true)}
+              size="small"
+            >
+              {t('apiKeys.createKey')}
+            </Button>
+          </Box>
 
       {error && (
         <Alert severity="error" sx={{ mb: 3 }}>
@@ -208,62 +220,62 @@ export function UserApiKeysPage() {
         </Alert>
       )}
 
-      <Card>
-        <CardContent>
+      <Card sx={{ mb: 3 }}>
+        <CardContent sx={{ p: { xs: 1, sm: 2 } }}>
           {apiKeys.length === 0 ? (
             <Typography sx={{ textAlign: 'center', py: 4, color: 'text.secondary' }}>
               {t('apiKeys.noApiKeys')}
             </Typography>
           ) : (
             <TableContainer>
-              <Table>
+              <Table size="small">
                 <TableHead>
                   <TableRow sx={{ backgroundColor: 'action.hover' }}>
-                    <TableCell>Name</TableCell>
-                    <TableCell>Key</TableCell>
-                    <TableCell>Created</TableCell>
-                    <TableCell>Last Used</TableCell>
-                    <TableCell>Status</TableCell>
-                    <TableCell align="right">Actions</TableCell>
+                    <TableCell sx={{ fontSize: { xs: "0.7rem", sm: "0.875rem" }, padding: { xs: "6px 4px", sm: "16px" }, whiteSpace: 'nowrap' }}>Name</TableCell>
+                    <TableCell sx={{ fontSize: { xs: "0.7rem", sm: "0.875rem" }, padding: { xs: "6px 4px", sm: "16px" }, whiteSpace: 'nowrap' }}>Key</TableCell>
+                    <TableCell sx={{ fontSize: { xs: "0.7rem", sm: "0.875rem" }, padding: { xs: "6px 4px", sm: "16px" }, whiteSpace: 'nowrap', display: { xs: 'none', sm: 'table-cell' } }}>Created</TableCell>
+                    <TableCell sx={{ fontSize: { xs: "0.7rem", sm: "0.875rem" }, padding: { xs: "6px 4px", sm: "16px" }, whiteSpace: 'nowrap', display: { xs: 'none', sm: 'table-cell' } }}>Last Used</TableCell>
+                    <TableCell sx={{ fontSize: { xs: "0.7rem", sm: "0.875rem" }, padding: { xs: "6px 4px", sm: "16px" }, whiteSpace: 'nowrap' }}>Status</TableCell>
+                    <TableCell align="right" sx={{ whiteSpace: 'nowrap' }}>Actions</TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
                   {apiKeys.map((key) => (
                     <TableRow key={key.id}>
-                      <TableCell>{key.name}</TableCell>
-                      <TableCell sx={{ fontFamily: 'monospace', fontSize: '0.85rem' }}>
-                        {key.key || 'sk-fake-••••••••••••••••'}
+                      <TableCell sx={{ fontSize: { xs: "0.75rem", sm: "0.875rem" }, padding: { xs: "6px 4px", sm: "16px" } }}>{key.name}</TableCell>
+                      <TableCell sx={{ fontFamily: 'monospace', fontSize: { xs: "0.7rem", sm: "0.85rem" }, padding: { xs: "6px 4px", sm: "16px" } }}>
+                        {key.key ? `${key.key.substring(0, 12)}...` : 'sk-••••••••'}
                       </TableCell>
-                      <TableCell>
+                      <TableCell sx={{ fontSize: { xs: "0.75rem", sm: "0.875rem" }, padding: { xs: "6px 4px", sm: "16px" }, display: { xs: 'none', sm: 'table-cell' } }}>
                         {new Date(key.createdAt).toLocaleDateString()}
                       </TableCell>
-                      <TableCell>
+                      <TableCell sx={{ fontSize: { xs: "0.75rem", sm: "0.875rem" }, padding: { xs: "6px 4px", sm: "16px" }, display: { xs: 'none', sm: 'table-cell' } }}>
                         {key.lastUsedAt
                           ? new Date(key.lastUsedAt).toLocaleDateString()
                           : t('common.never')}
                       </TableCell>
-                      <TableCell>
+                      <TableCell sx={{ padding: { xs: "6px 4px", sm: "16px" } }}>
                         <Chip
                           label={key.enabled ? t('common.active') : t('admin.disable')}
                           color={key.enabled ? 'success' : 'default'}
                           size="small"
                         />
                       </TableCell>
-                      <TableCell align="right">
+                      <TableCell align="right" sx={{ padding: { xs: "6px 4px", sm: "16px" } }}>
                         <Stack direction="row" spacing={0.5} justifyContent="flex-end">
                           <IconButton
                             size="small"
                             onClick={() => handleEditKey(key)}
                             title={t('common.edit')}
                           >
-                            <Edit2 size={18} />
+                            <Edit2 size={16} />
                           </IconButton>
                           <IconButton
                             size="small"
                             onClick={() => handleDeleteKey(key.id)}
                             color="error"
                           >
-                            <Trash2 size={18} />
+                            <Trash2 size={16} />
                           </IconButton>
                         </Stack>
                       </TableCell>
@@ -275,6 +287,8 @@ export function UserApiKeysPage() {
           )}
         </CardContent>
       </Card>
+        </Container>
+      </Box>
 
       {/* 创建 API Key 对话框 */}
       <Dialog
@@ -409,6 +423,6 @@ export function UserApiKeysPage() {
           {success}
         </Alert>
       </Snackbar>
-    </Container>
+    </Box>
   );
 }

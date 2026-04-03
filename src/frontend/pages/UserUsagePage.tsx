@@ -148,7 +148,7 @@ export function UserUsagePage() {
   }
 
   return (
-    <Container maxWidth="lg" sx={{ py: 4 }}>
+    <Container maxWidth="lg" sx={{ px: { xs: 1, sm: 2, md: 3 }, py: 4 }}>
       <Box sx={{ mb: 4 }}>
         <Typography variant="h4" sx={{ fontWeight: 600, mb: 1 }}>
           {t('usage.title')}
@@ -168,7 +168,7 @@ export function UserUsagePage() {
       <Card sx={{ mb: 4 }}>
         <CardContent>
           <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
-            <FormControl size="small" sx={{ minWidth: 120 }}>
+            <FormControl size="small" sx={{}}>
               <InputLabel>{t('usage.timeRange')}</InputLabel>
               <Select
                 value={timeRange}
@@ -182,7 +182,7 @@ export function UserUsagePage() {
               </Select>
             </FormControl>
 
-            <FormControl size="small" sx={{ minWidth: 150 }}>
+            <FormControl size="small" sx={{}}>
               <InputLabel>{t('usage.model')}</InputLabel>
               <Select
                 value={selectedModel}
@@ -196,7 +196,7 @@ export function UserUsagePage() {
               </Select>
             </FormControl>
 
-            <FormControl size="small" sx={{ minWidth: 120 }}>
+            <FormControl size="small" sx={{}}>
               <InputLabel>{t('usage.endpoint')}</InputLabel>
               <Select
                 value={selectedEndpoint}
@@ -258,11 +258,11 @@ export function UserUsagePage() {
             {t('usage.usageByDate')}
           </Typography>
           {dailyUsage.length > 0 ? (
-            <TableContainer>
-              <Table>
+            <TableContainer sx={{ overflowX: 'auto' }}>
+              <Table sx={{}}>
                 <TableHead>
                   <TableRow sx={{ backgroundColor: 'action.hover' }}>
-                    <TableCell>{t('usage.date')}</TableCell>
+                    <TableCell sx={{ fontSize: { xs: "0.75rem", sm: "0.875rem" }, padding: { xs: "8px 4px", sm: "16px" } }}>{t('usage.date')}</TableCell>
                     <TableCell align="right">{t('usage.requests')}</TableCell>
                     <TableCell align="right">{t('usage.tokens')}</TableCell>
                     <TableCell align="right">{t('usage.cost')}</TableCell>
@@ -271,7 +271,7 @@ export function UserUsagePage() {
                 <TableBody>
                   {dailyUsage.map((day) => (
                     <TableRow key={day.date}>
-                      <TableCell>{formatDateDisplay(day.date)}</TableCell>
+                      <TableCell sx={{ fontSize: { xs: "0.75rem", sm: "0.875rem" }, padding: { xs: "8px 4px", sm: "16px" } }}>{formatDateDisplay(day.date)}</TableCell>
                       <TableCell align="right">{day.requests.toLocaleString()}</TableCell>
                       <TableCell align="right">{day.tokens.toLocaleString()}</TableCell>
                       <TableCell align="right">{formatCurrency(day.cost)}</TableCell>
@@ -295,11 +295,11 @@ export function UserUsagePage() {
             {t('usage.usageByModel')}
           </Typography>
           {Object.keys(byModel).length > 0 ? (
-            <TableContainer>
-              <Table>
+            <TableContainer sx={{ overflowX: 'auto' }}>
+              <Table sx={{}}>
                 <TableHead>
                   <TableRow sx={{ backgroundColor: 'action.hover' }}>
-                    <TableCell>{t('usage.model')}</TableCell>
+                    <TableCell sx={{ fontSize: { xs: "0.75rem", sm: "0.875rem" }, padding: { xs: "8px 4px", sm: "16px" } }}>{t('usage.model')}</TableCell>
                     <TableCell align="right">{t('usage.requests')}</TableCell>
                     <TableCell align="right">{t('usage.tokens')}</TableCell>
                     <TableCell align="right">{t('usage.cost')}</TableCell>
@@ -308,7 +308,7 @@ export function UserUsagePage() {
                 <TableBody>
                   {Object.entries(byModel).map(([model, data]) => (
                     <TableRow key={model}>
-                      <TableCell>{model}</TableCell>
+                      <TableCell sx={{ fontSize: { xs: "0.75rem", sm: "0.875rem" }, padding: { xs: "8px 4px", sm: "16px" } }}>{model}</TableCell>
                       <TableCell align="right">{data.requests.toLocaleString()}</TableCell>
                       <TableCell align="right">{data.tokens.toLocaleString()}</TableCell>
                       <TableCell align="right">{formatCurrency(data.cost)}</TableCell>
@@ -330,13 +330,13 @@ export function UserUsagePage() {
             {t('usage.detailedRecords')}
           </Typography>
           {filteredRecords.length > 0 ? (
-            <TableContainer>
-              <Table size="small">
+            <TableContainer sx={{ overflowX: 'auto' }}>
+              <Table size="small" sx={{}}>
                 <TableHead>
                   <TableRow sx={{ backgroundColor: 'action.hover' }}>
-                    <TableCell>{t('usage.time')}</TableCell>
-                    <TableCell>{t('usage.model')}</TableCell>
-                    <TableCell>{t('usage.endpoint')}</TableCell>
+                    <TableCell sx={{ fontSize: { xs: "0.75rem", sm: "0.875rem" }, padding: { xs: "8px 4px", sm: "16px" } }}>{t('usage.time')}</TableCell>
+                    <TableCell sx={{ fontSize: { xs: "0.75rem", sm: "0.875rem" }, padding: { xs: "8px 4px", sm: "16px" } }}>{t('usage.model')}</TableCell>
+                    <TableCell sx={{ fontSize: { xs: "0.75rem", sm: "0.875rem" }, padding: { xs: "8px 4px", sm: "16px" } }}>{t('usage.endpoint')}</TableCell>
                     <TableCell align="right">{t('usage.tokens')}</TableCell>
                     <TableCell align="right">{t('usage.cost')}</TableCell>
                   </TableRow>
@@ -347,7 +347,7 @@ export function UserUsagePage() {
                       <TableCell sx={{ fontSize: '0.85rem' }}>
                         {formatDateTimeDisplay(record.timestamp)}
                       </TableCell>
-                      <TableCell>{record.model}</TableCell>
+                      <TableCell sx={{ fontSize: { xs: "0.75rem", sm: "0.875rem" }, padding: { xs: "8px 4px", sm: "16px" } }}>{record.model}</TableCell>
                       <TableCell sx={{ textTransform: 'capitalize' }}>{record.endpoint}</TableCell>
                       <TableCell align="right">{record.totalTokens.toLocaleString()}</TableCell>
                       <TableCell align="right">{formatCurrency(record.cost)}</TableCell>

@@ -5,16 +5,24 @@ import { addPendingRequest, getPendingRequest, removePendingRequest, getAllPendi
 let wss: WebSocketServer;
 const clients = new Set<WebSocket>();
 
-export function initWebSocket(server: import('http').Server) {
-  wss = new WebSocketServer({ 
-    server,
-    path: '/ws'  // 明确监听 /ws 路径
+export function initWebSocket(server: import('http').Server, path: string = '/ws') {
+  wss = new WebSocketServer({ noServer: true });
+
+  console.log(`[WS] WebSocket 服务器已启动，路径: ${path}`);
+
+  // 处理升级请求
+  server.on('upgrade', (request, socket, head) => {
+    const pathname = new URL(request.url || '', `http://${request.headers.host}`).pathname;
+    
+    if (pathname === path) {
+      wss.handleUpgrade(request, socket, head, (ws) => {
+        wss.emit('connection', ws, request);
+      });
+    }
   });
 
   wss.on('connection', (ws, req) => {
-    console.log('[WS] 收到WebSocket连接请求');
-    console.log('[WS] 请求URL:', req.url);
-    console.log('[WS] 请求头:', req.headers);
+    console.log('[WS] 收到 WebSocket 连接请求');
     
     clients.add(ws);
     console.log('[WS] 客户端已连接，当前连接数:', clients.size);
@@ -60,11 +68,10 @@ export function initWebSocket(server: import('http').Server) {
     });
 
     ws.on('error', (error) => {
-      console.error('[WS] WebSocket错误:', error);
+      console.error('[WS] WebSocket 错误:', error);
     });
   });
 
-  console.log('[WS] WebSocket服务器已启动');
   return wss;
 }
 

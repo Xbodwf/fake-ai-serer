@@ -1,28 +1,49 @@
 import { WebSocketServer, WebSocket } from 'ws';
-import type { WSMessage, PendingRequest, Model } from './types.js';
-import { addPendingRequest, getPendingRequest, removePendingRequest, getAllPendingRequests } from './requestStore.js';
+import type { WSMessage, PendingRequest } from './types.js';
+import {
+  addPendingRequest,
+  getPendingRequest,
+  removePendingRequest,
+  getAllPendingRequests,
+} from './requestStore.js';
+import { extractTokenFromHeader, verifyNodeToken } from './auth.js';
+import { getNodeById, getNodeByKey, touchNodeHeartbeat, markNodeOffline } from './storage.js';
 
 let reverseWss: WebSocketServer;
-const reverseClients = new Map<string, WebSocket>(); // clientId -> WebSocket
-const clientCapabilities = new Map<string, string[]>(); // clientId -> capabilities
+let nodeWss: WebSocketServer;
+const reverseClients = new Map<string, WebSocket>();
+const clientCapabilities = new Map<string, string[]>();
+const nodeClients = new Map<string, WebSocket>();
+
+// 节点请求超时时间（30秒）
+const NODE_REQUEST_TIMEOUT = 30000;
 
 /**
  * 初始化反向 WebSocket 服务
- * 客户端连接到这个服务可以注册为反向客户端，服务器会通过这个连接发送请求
  */
 export function initReverseWebSocket(server: import('http').Server, path: string = '/reverse-ws') {
-  reverseWss = new WebSocketServer({ server, path });
-  
+  reverseWss = new WebSocketServer({ noServer: true });
+
   console.log(`[Reverse WS] 反向 WebSocket 服务已启动，路径: ${path}`);
+
+  // 处理升级请求
+  server.on('upgrade', (request, socket, head) => {
+    const pathname = new URL(request.url || '', `http://${request.headers.host}`).pathname;
+    
+    if (pathname === path) {
+      reverseWss.handleUpgrade(request, socket, head, (ws) => {
+        reverseWss.emit('connection', ws, request);
+      });
+    }
+  });
 
   reverseWss.on('connection', (ws, req) => {
     const clientIp = req.socket.remoteAddress;
     console.log(`[Reverse WS] 新的反向连接来自: ${clientIp}`);
 
-    // 发送连接确认
     const connectMsg: WSMessage = {
       type: 'connected',
-      payload: { message: '已连接到反向 WebSocket 服务' }
+      payload: { message: '已连接到反向 WebSocket 服务' },
     };
     ws.send(JSON.stringify(connectMsg));
 
@@ -36,7 +57,6 @@ export function initReverseWebSocket(server: import('http').Server, path: string
     });
 
     ws.on('close', () => {
-      // 查找并移除断开连接的客户端
       for (const [clientId, clientWs] of reverseClients.entries()) {
         if (clientWs === ws) {
           reverseClients.delete(clientId);
@@ -57,14 +77,137 @@ export function initReverseWebSocket(server: import('http').Server, path: string
 }
 
 /**
- * 处理反向客户端的消息
+ * 初始化节点 WebSocket 服务
  */
+export function initNodeWebSocket(server: import('http').Server, path: string = '/node/ws') {
+  nodeWss = new WebSocketServer({ noServer: true });
+
+  console.log(`[Node WS] 节点 WebSocket 服务已启动，路径: ${path}`);
+
+  // 处理升级请求
+  server.on('upgrade', (request, socket, head) => {
+    const pathname = new URL(request.url || '', `http://${request.headers.host}`).pathname;
+    
+    if (pathname === path) {
+      nodeWss.handleUpgrade(request, socket, head, (ws) => {
+        nodeWss.emit('connection', ws, request);
+      });
+    }
+  });
+
+  nodeWss.on('connection', async (ws, req) => {
+    const authHeader = req.headers.authorization;
+    const tokenFromHeader = extractTokenFromHeader(authHeader);
+    const urlObj = new URL(req.url || '', `http://${req.headers.host}`);
+    const tokenFromQuery = urlObj.searchParams.get('token');
+    const keyFromQuery = urlObj.searchParams.get('key');
+    const nodeCredential = tokenFromHeader || tokenFromQuery || keyFromQuery;
+
+    console.log('[Node WS] 收到节点连接请求');
+    console.log('[Node WS] 凭证来源:', tokenFromHeader ? 'header' : (tokenFromQuery ? 'query:token' : (keyFromQuery ? 'query:key' : '无')));
+
+    if (!nodeCredential) {
+      console.log('[Node WS] 拒绝连接: 缺少节点凭证');
+      ws.close(1008, 'Missing node credential');
+      return;
+    }
+
+    const tokenPayload = verifyNodeToken(nodeCredential);
+    let node = tokenPayload ? getNodeById(tokenPayload.nodeId) : getNodeByKey(nodeCredential);
+    if (!node) {
+      console.log('[Node WS] 拒绝连接: 无效的节点凭证');
+      ws.close(1008, 'Invalid node credential');
+      return;
+    }
+
+    if (tokenPayload && tokenPayload.tokenVersion !== node.tokenVersion) {
+      console.log('[Node WS] 拒绝连接: 节点 token版本不匹配');
+      ws.close(1008, 'Node token version mismatch');
+      return;
+    }
+
+    console.log('[Node WS] 找到节点:', node.id, node.name);
+
+    if (!node.enabled) {
+      console.log('[Node WS] 拒绝连接: 节点已禁用');
+      ws.close(1008, 'Node is disabled');
+      return;
+    }
+
+    const previous = nodeClients.get(node.id);
+    if (previous && previous !== ws && previous.readyState === WebSocket.OPEN) {
+      previous.close(1000, 'Replaced by newer connection');
+    }
+
+    nodeClients.set(node.id, ws);
+    await touchNodeHeartbeat(node.id);
+
+    console.log(`[Node WS] 节点 ${node.id} 已连接`);
+
+    const ack: WSMessage = {
+      type: 'node-connect-ack',
+      payload: {
+        success: true,
+        nodeId: node.id,
+        message: 'Node connected',
+        serverTime: Date.now(),
+      },
+    };
+    ws.send(JSON.stringify(ack));
+
+    ws.on('message', async (data) => {
+      try {
+        const msg = JSON.parse(data.toString());
+
+        if (msg.type === 'node-heartbeat') {
+          await touchNodeHeartbeat(node.id);
+          const heartbeatAck: WSMessage = {
+            type: 'node-heartbeat',
+            payload: {
+              success: true,
+              nodeId: node.id,
+              serverTime: Date.now(),
+            },
+          };
+          ws.send(JSON.stringify(heartbeatAck));
+          return;
+        }
+
+        // 处理各种响应类型（支持 Python 客户端格式）
+        if (msg.type === 'response' || msg.type === 'stream' || msg.type === 'stream_end' || 
+            msg.type === 'image_response' || msg.type === 'video_response' || msg.type === 'error') {
+          await touchNodeHeartbeat(node.id);
+          handleReverseResponse(msg);
+          return;
+        }
+      } catch (e) {
+        console.error('[Node WS] 解析消息失败:', e);
+      }
+    });
+
+    ws.on('close', async () => {
+      const active = nodeClients.get(node.id);
+      if (active === ws) {
+        nodeClients.delete(node.id);
+        await markNodeOffline(node.id);
+      }
+      console.log(`[Node WS] 节点 ${node.id} 已断开`);
+    });
+
+    ws.on('error', (error) => {
+      console.error(`[Node WS] 节点 ${node.id} WebSocket 错误:`, error.message);
+    });
+  });
+
+  return nodeWss;
+}
+
 function handleReverseClientMessage(ws: WebSocket, msg: WSMessage) {
   switch (msg.type) {
     case 'reverse-connect':
       handleReverseConnect(ws, msg);
       break;
-    
+
     case 'response':
     case 'stream':
     case 'stream_end':
@@ -72,46 +215,39 @@ function handleReverseClientMessage(ws: WebSocket, msg: WSMessage) {
     case 'video_response':
       handleReverseResponse(msg);
       break;
-    
+
     case 'reverse-disconnect':
       handleReverseDisconnect(ws);
       break;
-    
+
     default:
       console.log(`[Reverse WS] 收到未知消息类型: ${msg.type}`);
   }
 }
 
-/**
- * 处理反向连接注册
- */
 function handleReverseConnect(ws: WebSocket, msg: WSMessage) {
   const payload = msg.payload as { clientId?: string; capabilities?: string[]; maxConcurrentRequests?: number };
   const clientId = payload.clientId || `reverse-client-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-  
-  // 检查是否已存在相同 clientId 的连接
+
   if (reverseClients.has(clientId)) {
     console.log(`[Reverse WS] 客户端 ${clientId} 已存在，替换旧连接`);
   }
-  
-  // 注册客户端
+
   reverseClients.set(clientId, ws);
   clientCapabilities.set(clientId, payload.capabilities || []);
-  
+
   console.log(`[Reverse WS] 反向客户端 ${clientId} 已注册，能力: ${payload.capabilities?.join(', ') || '无'}`);
-  
-  // 发送确认消息
+
   const ackMsg: WSMessage = {
     type: 'reverse-connect-ack',
     payload: {
       success: true,
       clientId,
-      message: '反向连接注册成功'
-    }
+      message: '反向连接注册成功',
+    },
   };
   ws.send(JSON.stringify(ackMsg));
-  
-  // 如果有待处理的请求，发送给新连接的反向客户端
+
   const pending = getAllPendingRequests();
   if (pending.length > 0) {
     console.log(`[Reverse WS] 向新客户端 ${clientId} 发送 ${pending.length} 个待处理请求`);
@@ -121,53 +257,75 @@ function handleReverseConnect(ws: WebSocket, msg: WSMessage) {
   }
 }
 
-/**
- * 处理反向客户端的响应
- */
-function handleReverseResponse(msg: WSMessage) {
-  const payload = msg.payload as { requestId: string; content: string; images?: any[]; videos?: any[] };
-  const req = getPendingRequest(payload.requestId);
+function handleReverseResponse(msg: WSMessage | any) {
+  // 支持两种格式：驼峰(requestId)和下划线(request_id)
+  const payload = msg.payload || msg;
+  const requestId = payload.requestId || payload.request_id;
+  const req = getPendingRequest(requestId);
 
   if (!req) {
-    console.warn('[Reverse WS] 未找到请求:', payload.requestId);
+    console.warn('[Reverse WS] 未找到请求:', requestId);
     return;
   }
 
   if (msg.type === 'response') {
-    // 非流式响应
-    req.resolve(payload.content);
-    removePendingRequest(payload.requestId);
-    console.log('[Reverse WS] 请求已处理:', payload.requestId);
+    // Python 客户端返回格式: { type: 'response', request_id, data: { status, headers, body } }
+    // 旧格式: { type: 'response', payload: { requestId, content } }
+    if (payload.data && typeof payload.data === 'object') {
+      // Python 客户端格式
+      const responseData = payload.data;
+      const body = responseData.body || '';
+      if (req.streamController && responseData.status === 200) {
+        // 流式响应
+        try {
+          req.streamController.enqueue(body);
+          req.streamController.close();
+        } catch (e) {
+          console.error('[Reverse WS] 处理响应失败:', e);
+        }
+      } else {
+        // 非流式响应
+        req.resolve(body);
+      }
+      console.log('[Reverse WS] HTTP 响应已处理:', requestId, 'status:', responseData.status);
+    } else {
+      // 旧格式
+      req.resolve(payload.content);
+      console.log('[Reverse WS] 请求已处理:', requestId);
+    }
+    removePendingRequest(requestId);
   } else if (msg.type === 'stream') {
-    // 流式响应 - 发送块
     if (req.streamController) {
       req.streamController.enqueue(payload.content);
     }
   } else if (msg.type === 'stream_end') {
-    // 流式结束
     if (req.streamController) {
       req.streamController.close();
     }
-    removePendingRequest(payload.requestId);
-    console.log('[Reverse WS] 流式请求已完成:', payload.requestId);
+    removePendingRequest(requestId);
+    console.log('[Reverse WS] 流式请求已完成:', requestId);
+  } else if (msg.type === 'error') {
+    // 错误响应
+    const error = payload.error || payload.data?.error || { message: 'Unknown error' };
+    console.error('[Reverse WS] 节点返回错误:', error);
+    if (req.streamController) {
+      req.streamController.close();
+    } else {
+      req.resolve(JSON.stringify({ error }));
+    }
+    removePendingRequest(requestId);
   } else if (msg.type === 'image_response') {
-    // 图片响应
     req.resolve(JSON.stringify(payload.images || []));
-    removePendingRequest(payload.requestId);
-    console.log('[Reverse WS] 图片请求已处理:', payload.requestId);
+    removePendingRequest(requestId);
+    console.log('[Reverse WS] 图片请求已处理:', requestId);
   } else if (msg.type === 'video_response') {
-    // 视频响应
     req.resolve(JSON.stringify(payload.videos || []));
-    removePendingRequest(payload.requestId);
-    console.log('[Reverse WS] 视频请求已处理:', payload.requestId);
+    removePendingRequest(requestId);
+    console.log('[Reverse WS] 视频请求已处理:', requestId);
   }
 }
 
-/**
- * 处理反向客户端断开
- */
 function handleReverseDisconnect(ws: WebSocket) {
-  // 查找并移除客户端
   for (const [clientId, clientWs] of reverseClients.entries()) {
     if (clientWs === ws) {
       reverseClients.delete(clientId);
@@ -178,9 +336,6 @@ function handleReverseDisconnect(ws: WebSocket) {
   }
 }
 
-/**
- * 发送请求到指定的反向客户端
- */
 export function sendRequestToReverseClient(clientId: string, req: PendingRequest): boolean {
   const ws = reverseClients.get(clientId);
   if (!ws || ws.readyState !== WebSocket.OPEN) {
@@ -197,7 +352,7 @@ export function sendRequestToReverseClient(clientId: string, req: PendingRequest
       requestType: req.requestType,
       imageRequest: req.imageRequest,
       videoRequest: req.videoRequest,
-    }
+    },
   };
 
   try {
@@ -210,9 +365,43 @@ export function sendRequestToReverseClient(clientId: string, req: PendingRequest
   }
 }
 
-/**
- * 广播请求到所有反向客户端
- */
+export function sendRequestToNode(nodeId: string, req: PendingRequest): boolean {
+  const ws = nodeClients.get(nodeId);
+  if (!ws || ws.readyState !== WebSocket.OPEN) {
+    console.warn(`[Node WS] 节点 ${nodeId} 不可用`);
+    return false;
+  }
+
+  // 构建请求消息，包含 payload 字段
+  const msg = {
+    type: 'request',
+    payload: {
+      requestId: req.requestId,  // 使用驼峰命名
+      isStream: req.isStream,     // 流式/非流式标志
+      method: 'POST',
+      path: '/v1/chat/completions',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(req.request),
+      // 额外信息供内部使用
+      _internal: {
+        requestParams: req.requestParams,
+        requestType: req.requestType,
+      },
+    },
+  };
+
+  try {
+    ws.send(JSON.stringify(msg));
+    console.log(`[Node WS] 请求 ${req.requestId} (流式: ${req.isStream}) 已发送到节点 ${nodeId}`);
+    return true;
+  } catch (error) {
+    console.error(`[Node WS] 发送请求到 ${nodeId} 失败:`, error);
+    return false;
+  }
+}
+
 export function broadcastRequestToReverseClients(req: PendingRequest): number {
   const msg: WSMessage = {
     type: 'request',
@@ -223,7 +412,7 @@ export function broadcastRequestToReverseClients(req: PendingRequest): number {
       requestType: req.requestType,
       imageRequest: req.imageRequest,
       videoRequest: req.videoRequest,
-    }
+    },
   };
   const data = JSON.stringify(msg);
 
@@ -243,9 +432,11 @@ export function broadcastRequestToReverseClients(req: PendingRequest): number {
   return sentCount;
 }
 
-/**
- * 获取第一个可用的反向客户端
- */
+export function isNodeConnected(nodeId: string): boolean {
+  const ws = nodeClients.get(nodeId);
+  return !!ws && ws.readyState === WebSocket.OPEN;
+}
+
 export function getFirstAvailableReverseClient(): string | null {
   for (const [clientId, ws] of reverseClients.entries()) {
     if (ws.readyState === WebSocket.OPEN) {
@@ -255,34 +446,22 @@ export function getFirstAvailableReverseClient(): string | null {
   return null;
 }
 
-/**
- * 获取所有反向客户端ID
- */
 export function getAllReverseClientIds(): string[] {
   return Array.from(reverseClients.keys());
 }
 
-/**
- * 获取反向客户端数量
- */
 export function getReverseClientCount(): number {
   return reverseClients.size;
 }
 
-/**
- * 获取反向客户端的连接状态
- */
 export function getReverseClientStatus(clientId: string): { connected: boolean; capabilities: string[] } {
   const ws = reverseClients.get(clientId);
   return {
     connected: ws !== undefined && ws.readyState === WebSocket.OPEN,
-    capabilities: clientCapabilities.get(clientId) || []
+    capabilities: clientCapabilities.get(clientId) || [],
   };
 }
 
-/**
- * 检查是否有反向客户端可用
- */
 export function hasReverseClients(): boolean {
   return reverseClients.size > 0;
 }

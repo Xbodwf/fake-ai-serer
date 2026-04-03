@@ -1,11 +1,12 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import { ThemeProvider, CssBaseline } from '@mui/material';
+import { ThemeProvider, CssBaseline, Box } from '@mui/material';
 import type { Theme } from '@mui/material';
 import { createTheme } from '@mui/material/styles';
 import { ServerProvider } from './contexts/ServerContext';
 import { useServer } from './contexts/ServerContext';
 import { AuthProvider } from './contexts/AuthContext';
 import { ThemeProvider as CustomThemeProvider, useTheme } from './contexts/ThemeContext';
+import { SidebarProvider } from './contexts/SidebarContext';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { UserLayout } from './components/UserLayout';
 import { AdminLayout } from './components/AdminLayout';
@@ -19,6 +20,7 @@ import { UserBillingPage } from './pages/UserBillingPage';
 import { UserProfilePage } from './pages/UserProfilePage';
 import { UserSettingsPage } from './pages/UserSettingsPage';
 import { UserInvitationPage } from './pages/UserInvitationPage';
+import { UserChatPage } from './pages/UserChatPage';
 import { ActionsPage } from './pages/ActionsPage';
 import { ActionEditorPage } from './pages/ActionEditorPage';
 import { ActionMarketplace } from './pages/ActionMarketplace';
@@ -28,6 +30,8 @@ import { AdminUserRequestsPage } from './pages/AdminUserRequestsPage';
 import { AdminSettingsPage } from './pages/AdminSettingsPage';
 import { AdminNotificationsPage } from './pages/AdminNotificationsPage';
 import { AdminRedeemCodesPage } from './pages/AdminRedeemCodesPage';
+import { AdminProvidersPage } from './pages/AdminProvidersPage';
+import { AdminNodesPage } from './pages/AdminNodesPage';
 import { ModelMarketplace } from './pages/ModelMarketplace';
 import ModelManager from './components/ModelManager';
 import { NotFoundPage } from './pages/NotFoundPage';
@@ -104,6 +108,7 @@ function createAppTheme(mode: 'light' | 'dark', primaryColor: string, secondaryC
         styleOverrides: {
           paper: {
             borderRight: isDark ? '1px solid rgba(255, 255, 255, 0.08)' : '1px solid rgba(0, 0, 0, 0.08)',
+            borderRadius: 0,
           },
         },
       },
@@ -112,6 +117,7 @@ function createAppTheme(mode: 'light' | 'dark', primaryColor: string, secondaryC
           root: {
             backgroundImage: 'none',
             borderBottom: isDark ? '1px solid rgba(255, 255, 255, 0.08)' : '1px solid rgba(0, 0, 0, 0.08)',
+            borderRadius: 0,
           },
         },
       },
@@ -162,8 +168,15 @@ function AppContent() {
     <ThemeProvider theme={muiTheme}>
       <CssBaseline />
       <AuthProvider>
+        <SidebarProvider>
         <ServerProvider>
-          <Routes>
+          <Box sx={{ 
+            width: '100vw', 
+            maxWidth: '100vw', 
+            overflowX: 'hidden',
+            overflowY: 'auto',
+          }}>
+            <Routes>
             {/* 认证路由 */}
             <Route path="/login" element={<LoginPage />} />
             <Route path="/register" element={<RegisterPage />} />
@@ -256,6 +269,16 @@ function AppContent() {
                 <ProtectedRoute>
                   <UserLayout>
                     <UserInvitationPage />
+                  </UserLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/chat"
+              element={
+                <ProtectedRoute>
+                  <UserLayout>
+                    <UserChatPage />
                   </UserLayout>
                 </ProtectedRoute>
               }
@@ -360,6 +383,26 @@ function AppContent() {
                 </ProtectedRoute>
               }
             />
+            <Route
+              path="/console/providers"
+              element={
+                <ProtectedRoute requiredRole="admin">
+                  <AdminLayout>
+                    <AdminProvidersPage />
+                  </AdminLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/console/nodes"
+              element={
+                <ProtectedRoute requiredRole="admin">
+                  <AdminLayout>
+                    <AdminNodesPage />
+                  </AdminLayout>
+                </ProtectedRoute>
+              }
+            />
 
             {/* 管理员控制台重定向 */}
             <Route path="/console" element={<Navigate to="/console/dashboard" replace />} />
@@ -370,7 +413,9 @@ function AppContent() {
             {/* 404 捕获所有未定义的路由 */}
             <Route path="*" element={<NotFoundPage />} />
           </Routes>
+          </Box>
         </ServerProvider>
+        </SidebarProvider>
       </AuthProvider>
     </ThemeProvider>
   );

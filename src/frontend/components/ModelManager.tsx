@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import {
   Box,
   Typography,
@@ -52,10 +52,13 @@ import {
   X,
   Gauge,
   Settings,
+  Server,
+  Cloud,
 } from 'lucide-react';
 import { useServer } from '../contexts/ServerContext';
-import type { Model, ModelUpdateParams } from '../types';
+import type { Model, ModelUpdateParams, Provider, Node } from '../types';
 import { useTranslation } from 'react-i18next';
+import axios from 'axios';
 
 // 格式化上下文大小
 function formatContextLength(value?: number): string {
@@ -156,8 +159,11 @@ interface FormData {
   pricing_output: number;
   pricing_per_request: number;
   pricing_cache_read: number;
-  api_key: string;
-  api_base_url: string;
+  // 转发模式
+  forwardingMode: 'provider' | 'node' | 'none';
+  providerId: string;
+  nodeId: string;
+  api_url_path: string;           // 相对路径
   api_type: ApiType;
   forwardModelName: string;       // 转发时使用的模型名称
   api_url_templates: {
@@ -192,8 +198,10 @@ const defaultFormData: FormData = {
   pricing_output: 0,
   pricing_per_request: 0,
   pricing_cache_read: 0,
-  api_key: '',
-  api_base_url: '',
+  forwardingMode: 'none',
+  providerId: '',
+  nodeId: '',
+  api_url_path: '',
   api_type: 'openai',
   forwardModelName: '',
   api_url_templates: {
@@ -222,6 +230,10 @@ export default function ModelManager() {
   const [formData, setFormData] = useState<FormData>(defaultFormData);
   const [activeTab, setActiveTab] = useState(0);
 
+  // Providers 和 Nodes 状态
+  const [providers, setProviders] = useState<Provider[]>([]);
+  const [nodes, setNodes] = useState<Node[]>([]);
+
   // 图标相关状态
   const [availableIcons, setAvailableIcons] = useState<Array<{ filename: string; url: string }>>([]);
   const [loadingIcons, setLoadingIcons] = useState(false);
@@ -231,6 +243,28 @@ export default function ModelManager() {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const isSmall = useMediaQuery(theme.breakpoints.down('sm'));
+
+  // 获取 providers 和 nodes
+  const fetchProvidersAndNodes = async () => {
+    const token = localStorage.getItem('token');
+    const headers = token ? { Authorization: `Bearer ${token}` } : {};
+    
+    try {
+      const [providersRes, nodesRes] = await Promise.all([
+        axios.get('/api/admin/providers', { headers }),
+        axios.get('/api/admin/nodes', { headers }),
+      ]);
+      setProviders(providersRes.data.providers || []);
+      setNodes(nodesRes.data.nodes || []);
+    } catch (error) {
+      console.error('Failed to fetch providers/nodes:', error);
+    }
+  };
+
+  // 组件加载时获取 providers 和 nodes
+  useEffect(() => {
+    fetchProvidersAndNodes();
+  }, []);
 
   // 获取可用图标列表
   const fetchAvailableIcons = async () => {
@@ -295,8 +329,22 @@ export default function ModelManager() {
   // 打开对话框时加载图标列表
   const handleOpenDialog = (model?: Model) => {
     fetchAvailableIcons();
+    fetchProvidersAndNodes();
     if (model) {
       setEditingModel(model);
+      
+      // 解析转发模式
+      let forwardingMode: 'provider' | 'node' | 'none' = 'none';
+      if (model.forwardingMode === 'provider' || model.providerId) {
+        forwardingMode = 'provider';
+      } else if (model.forwardingMode === 'node' || model.nodeId) {
+        forwardingMode = 'node';
+      }
+      
+      // 优先使用 api_url_path，兼容旧的 api_url_templates
+      const templateKey = getTemplateKeyByApiType((model.api_type || 'openai') as ApiType);
+      const api_url_path = model.api_url_path || model.api_url_templates?.[templateKey] || '';
+      
       setFormData({
         id: model.id,
         owned_by: model.owned_by,
@@ -310,8 +358,10 @@ export default function ModelManager() {
         pricing_output: model.pricing?.output || 0,
         pricing_per_request: model.pricing?.perRequest || 0,
         pricing_cache_read: model.pricing?.cacheRead || 0,
-        api_key: model.api_key || '',
-        api_base_url: getTemplateValueByApiType((model.api_type || 'openai') as ApiType, model.api_url_templates, model.api_base_url || ''),
+        forwardingMode,
+        providerId: model.providerId || '',
+        nodeId: model.nodeId || '',
+        api_url_path,
         api_type: model.api_type || 'openai',
         forwardModelName: model.forwardModelName || '',
         api_url_templates: {
@@ -347,18 +397,10 @@ export default function ModelManager() {
   const handleSave = async () => {
     if (!formData.id.trim()) return;
 
-    const templateKey = getTemplateKeyByApiType(formData.api_type);
-    const templateValue = formData.api_base_url.trim();
-
-    const mergedTemplates = {
-      ...formData.api_url_templates,
-      [templateKey]: templateValue,
-    };
-
-    const apiUrlTemplateEntries = Object.entries(mergedTemplates)
-      .map(([key, value]) => [key, value.trim()] as const)
-      .filter(([, value]) => value.length > 0);
-    const api_url_templates = apiUrlTemplateEntries.length > 0 ? Object.fromEntries(apiUrlTemplateEntries) : undefined;
+    // 根据转发模式设置相关字段
+    const forwardingMode = formData.forwardingMode;
+    const providerId = forwardingMode === 'provider' ? formData.providerId : undefined;
+    const nodeId = forwardingMode === 'node' ? formData.nodeId : undefined;
 
     const modelData = {
       id: formData.id,
@@ -376,11 +418,13 @@ export default function ModelManager() {
         perRequest: formData.pricing_per_request,
         cacheRead: formData.pricing_cache_read || undefined,
       } : undefined,
-      api_key: formData.api_key || undefined,
-      api_base_url: formData.api_base_url || undefined,
+      // 转发配置
+      forwardingMode,
+      providerId,
+      nodeId,
       api_type: formData.api_type || undefined,
       forwardModelName: formData.forwardModelName || undefined,
-      ...(api_url_templates ? { api_url_templates } : {}),
+      api_url_path: formData.api_url_path.trim() || undefined,
       supported_features: formData.supported_features ? formData.supported_features.split(',').map(s => s.trim()).filter(Boolean) : undefined,
       icon: formData.icon || undefined,
       allowManualReply: formData.allowManualReply,
@@ -738,8 +782,77 @@ export default function ModelManager() {
                 <Divider sx={{ my: 1 }} />
 
                 <Typography variant="subtitle2" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                  <Globe size={16} /> {t('models.manager.apiConfig')}
+                  <Cloud size={16} /> {t('models.manager.apiConfig')}
                 </Typography>
+                
+                {/* 转发模式选择 */}
+                <FormControl fullWidth size="small">
+                  <InputLabel>{t('models.manager.forwardingMode', '转发模式')}</InputLabel>
+                  <Select
+                    value={formData.forwardingMode}
+                    label={t('models.manager.forwardingMode', '转发模式')}
+                    onChange={(e) => setFormData({ 
+                      ...formData, 
+                      forwardingMode: e.target.value as 'provider' | 'node' | 'none',
+                      providerId: e.target.value !== 'provider' ? '' : formData.providerId,
+                      nodeId: e.target.value !== 'node' ? '' : formData.nodeId,
+                    })}
+                  >
+                    <MenuItem value="none">{t('models.manager.forwardingNone', '无转发（模拟响应）')}</MenuItem>
+                    <MenuItem value="provider">{t('models.manager.forwardingProvider', '通过提供商转发')}</MenuItem>
+                    <MenuItem value="node">{t('models.manager.forwardingNode', '通过节点转发')}</MenuItem>
+                  </Select>
+                </FormControl>
+
+                {/* 提供商选择 */}
+                {formData.forwardingMode === 'provider' && (
+                  <FormControl fullWidth size="small">
+                    <InputLabel>{t('models.manager.selectProvider', '选择提供商')}</InputLabel>
+                    <Select
+                      value={formData.providerId}
+                      label={t('models.manager.selectProvider', '选择提供商')}
+                      onChange={(e) => setFormData({ ...formData, providerId: e.target.value })}
+                    >
+                      {providers.length === 0 ? (
+                        <MenuItem disabled value="">
+                          {t('models.manager.noProviders', '暂无提供商，请先添加')}
+                        </MenuItem>
+                      ) : (
+                        providers.map(p => (
+                          <MenuItem key={p.id} value={p.id}>
+                            {p.name} ({p.slug})
+                          </MenuItem>
+                        ))
+                      )}
+                    </Select>
+                  </FormControl>
+                )}
+
+                {/* 节点选择 */}
+                {formData.forwardingMode === 'node' && (
+                  <FormControl fullWidth size="small">
+                    <InputLabel>{t('models.manager.selectNode', '选择节点')}</InputLabel>
+                    <Select
+                      value={formData.nodeId}
+                      label={t('models.manager.selectNode', '选择节点')}
+                      onChange={(e) => setFormData({ ...formData, nodeId: e.target.value })}
+                    >
+                      {nodes.length === 0 ? (
+                        <MenuItem disabled value="">
+                          {t('models.manager.noNodes', '暂无节点，请先添加')}
+                        </MenuItem>
+                      ) : (
+                        nodes.map(n => (
+                          <MenuItem key={n.id} value={n.id}>
+                            {n.name} ({n.status === 'online' ? t('nodes.connected') : t('nodes.disconnected')})
+                          </MenuItem>
+                        ))
+                      )}
+                    </Select>
+                  </FormControl>
+                )}
+
+                {/* API 类型 */}
                 <FormControl fullWidth size="small">
                   <InputLabel>{t('models.manager.apiType')}</InputLabel>
                   <Select
@@ -750,7 +863,7 @@ export default function ModelManager() {
                       setFormData({
                         ...formData,
                         api_type: nextApiType,
-                        api_base_url: getTemplateValueByApiType(nextApiType, formData.api_url_templates),
+                        api_url_path: getTemplateValueByApiType(nextApiType, formData.api_url_templates),
                       });
                     }}
                   >
@@ -761,32 +874,32 @@ export default function ModelManager() {
                     <MenuItem value="custom">{t('models.manager.customApi')}</MenuItem>
                   </Select>
                 </FormControl>
-                <TextField
-                  label={t('models.manager.apiKey')}
-                  fullWidth
-                  value={formData.api_key}
-                  onChange={(e) => setFormData({ ...formData, api_key: e.target.value })}
-                  placeholder="sk-..."
-                  size="small"
-                />
-                <TextField
-                  label={getApiTemplateLabelByType(formData.api_type)}
-                  fullWidth
-                  value={formData.api_base_url}
-                  onChange={(e) => setFormData({ ...formData, api_base_url: e.target.value })}
-                  placeholder={getApiTemplatePlaceholderByType(formData.api_type)}
-                  size="small"
-                  helperText="变量: {baseUrl} {model} {forwardModel} {apiKey}"
-                />
-                <TextField
-                  label={t('models.manager.forwardModelName', '转发模型名称')}
-                  fullWidth
-                  value={formData.forwardModelName}
-                  onChange={(e) => setFormData({ ...formData, forwardModelName: e.target.value })}
-                  placeholder={t('models.manager.forwardModelNamePlaceholder', '留空则使用原模型名称')}
-                  size="small"
-                  helperText={t('models.manager.forwardModelNameHelper', '不同平台的模型名称可能不同，可在此指定转发时使用的模型名称')}
-                />
+
+                {/* 相对路径 */}
+                {(formData.forwardingMode === 'provider' || formData.forwardingMode === 'node') && (
+                  <TextField
+                    label={t('models.manager.apiUrlPath', 'API 相对路径')}
+                    fullWidth
+                    value={formData.api_url_path}
+                    onChange={(e) => setFormData({ ...formData, api_url_path: e.target.value })}
+                    placeholder="/v1/chat/completions"
+                    size="small"
+                    helperText={t('models.manager.apiUrlPathHelper', '相对于提供商/节点配置的 Base URL')}
+                  />
+                )}
+
+                {/* 转发模型名称 */}
+                {(formData.forwardingMode === 'provider' || formData.forwardingMode === 'node') && (
+                  <TextField
+                    label={t('models.manager.forwardModelName', '转发模型名称')}
+                    fullWidth
+                    value={formData.forwardModelName}
+                    onChange={(e) => setFormData({ ...formData, forwardModelName: e.target.value })}
+                    placeholder={t('models.manager.forwardModelNamePlaceholder', '留空则使用原模型名称')}
+                    size="small"
+                    helperText={t('models.manager.forwardModelNameHelper', '不同平台的模型名称可能不同，可在此指定转发时使用的模型名称')}
+                  />
+                )}
                 
                 <FormControlLabel
                   control={
@@ -1246,8 +1359,77 @@ export default function ModelManager() {
               <Divider sx={{ my: 1 }} />
 
               <Typography variant="subtitle2" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                <Key size={16} /> {t('models.manager.apiConfig')}
+                <Cloud size={16} /> {t('models.manager.apiConfig')}
               </Typography>
+              
+              {/* 转发模式选择 */}
+              <FormControl fullWidth>
+                <InputLabel>{t('models.manager.forwardingMode', '转发模式')}</InputLabel>
+                <Select
+                  value={formData.forwardingMode}
+                  label={t('models.manager.forwardingMode', '转发模式')}
+                  onChange={(e) => setFormData({ 
+                    ...formData, 
+                    forwardingMode: e.target.value as 'provider' | 'node' | 'none',
+                    providerId: e.target.value !== 'provider' ? '' : formData.providerId,
+                    nodeId: e.target.value !== 'node' ? '' : formData.nodeId,
+                  })}
+                >
+                  <MenuItem value="none">{t('models.manager.forwardingNone', '无转发（模拟响应）')}</MenuItem>
+                  <MenuItem value="provider">{t('models.manager.forwardingProvider', '通过提供商转发')}</MenuItem>
+                  <MenuItem value="node">{t('models.manager.forwardingNode', '通过节点转发')}</MenuItem>
+                </Select>
+              </FormControl>
+
+              {/* 提供商选择 */}
+              {formData.forwardingMode === 'provider' && (
+                <FormControl fullWidth>
+                  <InputLabel>{t('models.manager.selectProvider', '选择提供商')}</InputLabel>
+                  <Select
+                    value={formData.providerId}
+                    label={t('models.manager.selectProvider', '选择提供商')}
+                    onChange={(e) => setFormData({ ...formData, providerId: e.target.value })}
+                  >
+                    {providers.length === 0 ? (
+                      <MenuItem disabled value="">
+                        {t('models.manager.noProviders', '暂无提供商，请先添加')}
+                      </MenuItem>
+                    ) : (
+                      providers.map(p => (
+                        <MenuItem key={p.id} value={p.id}>
+                          {p.name} ({p.slug})
+                        </MenuItem>
+                      ))
+                    )}
+                  </Select>
+                </FormControl>
+              )}
+
+              {/* 节点选择 */}
+              {formData.forwardingMode === 'node' && (
+                <FormControl fullWidth>
+                  <InputLabel>{t('models.manager.selectNode', '选择节点')}</InputLabel>
+                  <Select
+                    value={formData.nodeId}
+                    label={t('models.manager.selectNode', '选择节点')}
+                    onChange={(e) => setFormData({ ...formData, nodeId: e.target.value })}
+                  >
+                    {nodes.length === 0 ? (
+                      <MenuItem disabled value="">
+                        {t('models.manager.noNodes', '暂无节点，请先添加')}
+                      </MenuItem>
+                    ) : (
+                      nodes.map(n => (
+                        <MenuItem key={n.id} value={n.id}>
+                          {n.name} ({n.status === 'online' ? t('nodes.connected') : t('nodes.disconnected')})
+                        </MenuItem>
+                      ))
+                    )}
+                  </Select>
+                </FormControl>
+              )}
+
+              {/* API 类型 */}
               <FormControl fullWidth>
                 <InputLabel>{t('models.manager.apiType')}</InputLabel>
                 <Select
@@ -1258,7 +1440,7 @@ export default function ModelManager() {
                     setFormData({
                       ...formData,
                       api_type: nextApiType,
-                      api_base_url: getTemplateValueByApiType(nextApiType, formData.api_url_templates),
+                      api_url_path: getTemplateValueByApiType(nextApiType, formData.api_url_templates),
                     });
                   }}
                 >
@@ -1269,29 +1451,30 @@ export default function ModelManager() {
                   <MenuItem value="custom">{t('models.manager.customApi')}</MenuItem>
                 </Select>
               </FormControl>
-              <TextField
-                label={t('models.manager.apiKey')}
-                fullWidth
-                value={formData.api_key}
-                onChange={(e) => setFormData({ ...formData, api_key: e.target.value })}
-                placeholder="sk-..."
-              />
-              <TextField
-                label={getApiTemplateLabelByType(formData.api_type)}
-                fullWidth
-                value={formData.api_base_url}
-                onChange={(e) => setFormData({ ...formData, api_base_url: e.target.value })}
-                placeholder={getApiTemplatePlaceholderByType(formData.api_type)}
-                helperText="变量: {baseUrl} {model} {forwardModel} {apiKey}"
-              />
-              <TextField
-                label={t('models.manager.forwardModelName', '转发模型名称')}
-                fullWidth
-                value={formData.forwardModelName}
-                onChange={(e) => setFormData({ ...formData, forwardModelName: e.target.value })}
-                placeholder={t('models.manager.forwardModelNamePlaceholder', '留空则使用原模型名称')}
-                helperText={t('models.manager.forwardModelNameHelper', '不同平台的模型名称可能不同，可在此指定转发时使用的模型名称')}
-              />
+
+              {/* 相对路径 */}
+              {(formData.forwardingMode === 'provider' || formData.forwardingMode === 'node') && (
+                <TextField
+                  label={t('models.manager.apiUrlPath', 'API 相对路径')}
+                  fullWidth
+                  value={formData.api_url_path}
+                  onChange={(e) => setFormData({ ...formData, api_url_path: e.target.value })}
+                  placeholder="/v1/chat/completions"
+                  helperText={t('models.manager.apiUrlPathHelper', '相对于提供商/节点配置的 Base URL')}
+                />
+              )}
+
+              {/* 转发模型名称 */}
+              {(formData.forwardingMode === 'provider' || formData.forwardingMode === 'node') && (
+                <TextField
+                  label={t('models.manager.forwardModelName', '转发模型名称')}
+                  fullWidth
+                  value={formData.forwardModelName}
+                  onChange={(e) => setFormData({ ...formData, forwardModelName: e.target.value })}
+                  placeholder={t('models.manager.forwardModelNamePlaceholder', '留空则使用原模型名称')}
+                  helperText={t('models.manager.forwardModelNameHelper', '不同平台的模型名称可能不同，可在此指定转发时使用的模型名称')}
+                />
+              )}
 
               <FormControlLabel
                 control={

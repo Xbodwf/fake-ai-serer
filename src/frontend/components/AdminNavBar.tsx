@@ -21,6 +21,8 @@ import {
   Bell,
   Ticket,
   Settings,
+  Server,
+  Network,
   LogOut,
   Menu as MenuIcon,
   X,
@@ -49,6 +51,8 @@ export function AdminNavBar() {
     { label: t('nav.users'), path: '/console/users', icon: <Users size={20} /> },
     { label: t('nav.notifications'), path: '/console/notifications', icon: <Bell size={20} /> },
     { label: t('nav.redeemCodes'), path: '/console/redeem-codes', icon: <Ticket size={20} /> },
+    { label: t('nav.providers'), path: '/console/providers', icon: <Server size={20} /> },
+    { label: t('nav.nodes'), path: '/console/nodes', icon: <Network size={20} /> },
     { label: t('nav.loginSettings'), path: '/console/settings', icon: <Settings size={20} /> },
   ];
 
@@ -109,13 +113,7 @@ export function AdminNavBar() {
       <Box sx={{ borderTop: '1px solid', borderColor: 'divider' }}>
         <List disablePadding>
           <ListItemButton
-            onClick={() => {
-              if (isMobile) {
-                handleLogout();
-              } else {
-                setUserMenuOpen(!userMenuOpen);
-              }
-            }}
+            onClick={() => setUserMenuOpen(!userMenuOpen)}
             sx={{
               mx: 2,
               my: 1,
@@ -138,7 +136,7 @@ export function AdminNavBar() {
             </Stack>
           </ListItemButton>
 
-          <Collapse in={userMenuOpen && !isMobile}>
+          <Collapse in={userMenuOpen}>
             <List disablePadding sx={{ pb: 2 }}>
               {accountMenuItems.map((item, index) => (
                 <ListItemButton
@@ -163,15 +161,10 @@ export function AdminNavBar() {
 
           <Divider />
 
-          {!isMobile && (
-            <>
-              <Divider />
-              <Box sx={{ p: 3, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <LanguageSwitcher />
-                <ThemeSwitcher />
-              </Box>
-            </>
-          )}
+          <Box sx={{ p: 3, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <LanguageSwitcher />
+            <ThemeSwitcher />
+          </Box>
         </List>
       </Box>
     </Box>
@@ -194,15 +187,23 @@ export function AdminNavBar() {
             py: 1,
             display: 'flex',
             alignItems: 'center',
-            justifyContent: 'space-between',
           }}
         >
+          <IconButton
+            onClick={() => setMobileOpen(true)}
+            color="inherit"
+            sx={{ mr: 1 }}
+          >
+            <MenuIcon size={24} />
+          </IconButton>
+
           <Typography
             variant="h6"
             sx={{
               fontWeight: 700,
               color: 'primary.main',
               cursor: 'pointer',
+              flexGrow: 1,
             }}
             onClick={() => navigate('/console/dashboard')}
           >
@@ -212,12 +213,6 @@ export function AdminNavBar() {
           <Stack direction="row" spacing={1} alignItems="center">
             <LanguageSwitcher />
             <ThemeSwitcher />
-            <IconButton
-              onClick={() => setMobileOpen(true)}
-              color="inherit"
-            >
-              <MenuIcon size={24} />
-            </IconButton>
           </Stack>
         </Box>
 

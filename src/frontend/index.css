@@ -1,68 +1,202 @@
 :root {
-  font-family: system-ui, Avenir, Helvetica, Arial, sans-serif;
+  font-family: "Lexend", "Noto Sans SC", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   line-height: 1.5;
   font-weight: 400;
-
-  color-scheme: light dark;
-  color: rgba(255, 255, 255, 0.87);
-  background-color: #242424;
-
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
-a {
-  font-weight: 500;
-  color: #646cff;
-  text-decoration: inherit;
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
 }
-a:hover {
-  color: #535bf2;
+
+html,
+body,
+#root {
+  width: 100%;
+  min-height: 100%;
+  overflow-x: hidden;
+  max-width: 100vw;
 }
 
 body {
   margin: 0;
-  display: flex;
-  place-items: center;
   min-width: 320px;
-  min-height: 100vh;
+  overflow-x: hidden;
 }
 
-h1 {
-  font-size: 3.2em;
-  line-height: 1.1;
+/* 防止主要容器超出屏幕宽度 */
+#root > div {
+  max-width: 100vw;
+  overflow-x: hidden;
 }
 
-button {
-  border-radius: 8px;
-  border: 1px solid transparent;
-  padding: 0.6em 1.2em;
-  font-size: 1em;
-  font-weight: 500;
-  font-family: inherit;
-  background-color: #1a1a1a;
-  cursor: pointer;
-  transition: border-color 0.25s;
-}
-button:hover {
-  border-color: #646cff;
-}
-button:focus,
-button:focus-visible {
-  outline: 4px auto -webkit-focus-ring-color;
+/* 表格容器允许水平滚动 */
+.MuiTableContainer-root {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
-@media (prefers-color-scheme: light) {
-  :root {
-    color: #213547;
-    background-color: #ffffff;
+/* 表格可以比容器宽 */
+.MuiTable-root {
+  min-width: max-content;
+}
+
+/* 移动端表格样式优化 */
+@media (max-width: 768px) {
+  /* 表格单元格 */
+  .MuiTableCell-root {
+    padding: 8px 4px;
+    font-size: 0.75rem;
   }
-  a:hover {
-    color: #747bff;
+
+  /* 表格标题 */
+  .MuiTableHead-root .MuiTableCell-root {
+    font-size: 0.7rem;
+    font-weight: 600;
   }
-  button {
-    background-color: #f9f9f9;
+
+  /* 容器适配 */
+  .MuiContainer-root {
+    padding-left: 8px !important;
+    padding-right: 8px !important;
+    max-width: 100% !important;
   }
+
+  /* 卡片内边距 */
+  .MuiCard-root {
+    border-radius: 8px !important;
+  }
+
+  .MuiCardContent-root {
+    padding: 12px !important;
+  }
+
+  /* 标题大小 */
+  .MuiTypography-h4 {
+    font-size: 1.25rem !important;
+  }
+
+  .MuiTypography-h5 {
+    font-size: 1.1rem !important;
+  }
+
+  .MuiTypography-h6 {
+    font-size: 1rem !important;
+  }
+
+  /* 按钮适配 */
+  .MuiButton-root {
+    padding: 6px 12px;
+    font-size: 0.8rem;
+  }
+
+  /* 标签页 */
+  .MuiTab-root {
+    min-width: auto;
+    padding: 6px 12px;
+    font-size: 0.8rem;
+  }
+
+  /* 选择器 */
+  .MuiFormControl-root {
+    width: 100%;
+    margin-bottom: 8px;
+  }
+
+  /* 对话框 */
+  .MuiDialog-paper {
+    margin: 16px;
+    max-height: calc(100% - 32px);
+  }
+
+  /* 网格布局 */
+  .MuiGrid-item {
+    padding: 8px !important;
+  }
+
+  /* 统计卡片 */
+  .MuiCard-root .MuiTypography-h5 {
+    font-size: 1.25rem !important;
+  }
+
+  /* 卡片内容换行 */
+  .MuiCardContent-root {
+    word-break: break-word;
+    overflow-wrap: break-word;
+  }
+
+  /* 防止长文本溢出 */
+  .MuiTypography-root {
+    word-break: break-word;
+    overflow-wrap: break-word;
+  }
+
+  /* Chip 适配 */
+  .MuiChip-root {
+    font-size: 0.7rem;
+    height: 24px;
+  }
+
+  /* 表单字段 */
+  .MuiTextField-root {
+    width: 100%;
+  }
+
+  /* 弹性布局优化 */
+  .MuiStack-root {
+    flex-wrap: wrap;
+  }
+}
+
+/* 确保文本内容能正确换行 */
+p,
+div,
+span,
+li,
+td,
+th {
+  word-break: break-word;
+  overflow-wrap: break-word;
+}
+
+/* 代码块和预格式化文本 */
+pre,
+code {
+  white-space: pre-wrap !important;
+  word-break: break-word !important;
+  overflow-wrap: break-word !important;
+  max-width: 100% !important;
+  display: block;
+}
+
+/* 表格单元格 */
+td,
+th {
+  word-break: break-word !important;
+}
+
+/* 链接 */
+a {
+  word-break: break-all !important;
+  overflow-wrap: break-word !important;
+}
+
+/* 确保所有图片和媒体不会溢出 */
+img,
+video,
+canvas,
+svg {
+  max-width: 100%;
+  height: auto;
+}
+
+/* Drawer 和 Modal 不应该受 overflow: hidden 影响 */
+.MuiDrawer-root,
+.MuiModal-root {
+  overflow: visible !important;
 }

@@ -203,7 +203,7 @@ export function AdminDashboard() {
           <Typography variant="h6" sx={{ fontWeight: 600, mb: 2 }}>
             {t('admin.quickActions')}
           </Typography>
-          <Stack direction="row" spacing={2} sx={{ flexWrap: 'wrap' }}>
+          <Stack direction="row" spacing={2} sx={{ flexWrap: 'wrap', rowGap: 1 }}>
             <Button
               variant="contained"
               onClick={() => navigate('/console/users')}

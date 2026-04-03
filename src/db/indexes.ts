@@ -1,73 +1,91 @@
 import { getDB } from './connection';
 
 export async function initializeIndexes(): Promise<void> {
-  const db = getDB();
+ const db = getDB();
 
-  // 创建索引的辅助函数，忽略已存在的索引错误
-  const createIndexSafe = async (collection: string, index: Record<string, number>, options?: Record<string, unknown>) => {
-    try {
-      await db.collection(collection).createIndex(index, options);
-    } catch (error: any) {
-      // 忽略索引已存在的错误
-      if (error.code === 85 || error.code === 86 || error.message?.includes('existing index')) {
-        console.log(`Index already exists on ${collection}, skipping...`);
-      } else {
-        console.error(`Failed to create index on ${collection}:`, error.message);
-      }
-    }
-  };
+ // 创建索引的辅助函数，忽略已存在的索引错误
+ const createIndexSafe = async (collection: string, index: Record<string, number>, options?: Record<string, unknown>) => {
+ try {
+ await db.collection(collection).createIndex(index, options);
+ } catch (error: any) {
+ // 忽略索引已存在的错误
+ if (error.code ===85 || error.code ===86 || error.message?.includes('existing index')) {
+ console.log(`Index already exists on ${collection}, skipping...`);
+ } else {
+ console.error(`Failed to create index on ${collection}:`, error.message);
+ }
+ }
+ };
 
-  // Users indexes
-  await createIndexSafe('users', { username: 1 }, { unique: true });
-  await createIndexSafe('users', { email: 1 }, { unique: true });
-  await createIndexSafe('users', { uid: 1 }, { sparse: true, unique: true });
-  await createIndexSafe('users', { inviteCode: 1 }, { sparse: true, unique: true });
-  await createIndexSafe('users', { permissionLevel: 1 });
+ // Users indexes
+ await createIndexSafe('users', { username:1 }, { unique: true });
+ await createIndexSafe('users', { email:1 }, { unique: true });
+ await createIndexSafe('users', { uid:1 }, { sparse: true, unique: true });
+ await createIndexSafe('users', { inviteCode:1 }, { sparse: true, unique: true });
+ await createIndexSafe('users', { permissionLevel:1 });
 
-  // ApiKeys indexes
-  await createIndexSafe('apiKeys', { key: 1 }, { unique: true });
-  await createIndexSafe('apiKeys', { userId: 1 });
+ // ApiKeys indexes
+ await createIndexSafe('apiKeys', { key:1 }, { unique: true });
+ await createIndexSafe('apiKeys', { userId:1 });
 
-  // Models indexes
-  await createIndexSafe('models', { id: 1 }, { unique: true });
-  await createIndexSafe('models', { owned_by: 1 });
-  await createIndexSafe('models', { category: 1 });
-  await createIndexSafe('models', { ownerId: 1 });
-  await createIndexSafe('models', { isPublic: 1 });
-  await createIndexSafe('models', { tags: 1 });
+ // Models indexes
+ await createIndexSafe('models', { id:1 }, { unique: true });
+ await createIndexSafe('models', { owned_by:1 });
+ await createIndexSafe('models', { category:1 });
+ await createIndexSafe('models', { ownerId:1 });
+ await createIndexSafe('models', { isPublic:1 });
+ await createIndexSafe('models', { tags:1 });
+ await createIndexSafe('models', { forwardingMode:1 });
+ await createIndexSafe('models', { providerId:1 });
+ await createIndexSafe('models', { nodeId:1 });
+ await createIndexSafe('models', { providerUid:1 });
 
-  // UsageRecords indexes
-  await createIndexSafe('usageRecords', { userId: 1 });
-  await createIndexSafe('usageRecords', { apiKeyId: 1 });
-  await createIndexSafe('usageRecords', { timestamp: 1 });
-  await createIndexSafe('usageRecords', { userId: 1, timestamp: -1 });
-  await createIndexSafe('usageRecords', { modelId: 1 });
+ // Providers indexes
+ await createIndexSafe('providers', { id:1 }, { unique: true });
+ await createIndexSafe('providers', { name:1 }, { unique: true });
+ await createIndexSafe('providers', { slug:1 }, { unique: true });
+ await createIndexSafe('providers', { enabled:1 });
 
-  // Invoices indexes
-  await createIndexSafe('invoices', { userId: 1 });
-  await createIndexSafe('invoices', { period: 1 });
-  await createIndexSafe('invoices', { userId: 1, period: 1 }, { unique: true });
-  await createIndexSafe('invoices', { status: 1 });
+ // Nodes indexes
+ await createIndexSafe('nodes', { id:1 }, { unique: true });
+ await createIndexSafe('nodes', { enabled:1 });
+ await createIndexSafe('nodes', { status:1 });
+ await createIndexSafe('nodes', { lastSeenAt: -1 });
 
-  // Actions indexes
-  await createIndexSafe('actions', { createdBy: 1 });
-  await createIndexSafe('actions', { isPublic: 1 });
-  await createIndexSafe('actions', { tags: 1 });
-  await createIndexSafe('actions', { createdBy: 1, name: 1 }, { unique: true, partialFilterExpression: { createdBy: { $exists: true } } });
+ // UsageRecords indexes
+ await createIndexSafe('usageRecords', { userId:1 });
+ await createIndexSafe('usageRecords', { apiKeyId:1 });
+ await createIndexSafe('usageRecords', { timestamp:1 });
+ await createIndexSafe('usageRecords', { userId:1, timestamp: -1 });
+ await createIndexSafe('usageRecords', { modelId:1 });
+ await createIndexSafe('usageRecords', { providerUserId:1 });
+ await createIndexSafe('usageRecords', { providerUid:1 });
 
-  // InvitationRecords indexes
-  await createIndexSafe('invitationRecords', { inviterId: 1 });
-  await createIndexSafe('invitationRecords', { inviteeId: 1 });
-  await createIndexSafe('invitationRecords', { inviteCode: 1 });
+ // Invoices indexes
+ await createIndexSafe('invoices', { userId:1 });
+ await createIndexSafe('invoices', { period:1 });
+ await createIndexSafe('invoices', { userId:1, period:1 }, { unique: true });
+ await createIndexSafe('invoices', { status:1 });
 
-  // Notifications indexes
-  await createIndexSafe('notifications', { isActive: 1 });
-  await createIndexSafe('notifications', { isPinned: 1 });
+ // Actions indexes
+ await createIndexSafe('actions', { createdBy:1 });
+ await createIndexSafe('actions', { isPublic:1 });
+ await createIndexSafe('actions', { tags:1 });
+ await createIndexSafe('actions', { createdBy:1, name:1 }, { unique: true, partialFilterExpression: { createdBy: { $exists: true } } });
 
-  // PaymentOrders indexes
-  await createIndexSafe('payment_orders', { outTradeNo: 1 }, { unique: true });
-  await createIndexSafe('payment_orders', { userId: 1, createdAt: -1 });
-  await createIndexSafe('payment_orders', { status: 1 });
+ // InvitationRecords indexes
+ await createIndexSafe('invitationRecords', { inviterId:1 });
+ await createIndexSafe('invitationRecords', { inviteeId:1 });
+ await createIndexSafe('invitationRecords', { inviteCode:1 });
 
-  console.log('Database indexes initialized successfully');
+ // Notifications indexes
+ await createIndexSafe('notifications', { isActive:1 });
+ await createIndexSafe('notifications', { isPinned:1 });
+
+ // PaymentOrders indexes
+ await createIndexSafe('payment_orders', { outTradeNo:1 }, { unique: true });
+ await createIndexSafe('payment_orders', { userId:1, createdAt: -1 });
+ await createIndexSafe('payment_orders', { status:1 });
+
+ console.log('Database indexes initialized successfully');
 }

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect } from 'react';
 import {
   AppBar,
   Box,
@@ -16,9 +16,10 @@ import {
   useMediaQuery,
   useTheme,
 } from '@mui/material';
-import { Menu as MenuIcon, LogOut, Settings as SettingsIcon, BookOpen, LayoutDashboard, Key, CreditCard, Activity, BarChart3, FileText, ShoppingBag, Zap } from 'lucide-react';
+import { Menu as MenuIcon, LogOut, Settings as SettingsIcon, BookOpen, LayoutDashboard, Key, CreditCard, Activity, BarChart3, FileText, ShoppingBag, Zap, MessageSquare } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import { useSidebar } from '../contexts/SidebarContext';
 import { useTranslation } from 'react-i18next';
 import { LanguageSwitcher } from './LanguageSwitcher';
 import { ThemeSwitcher } from './ThemeSwitcher';
@@ -36,13 +37,21 @@ export function UserLayout({ children }: UserLayoutProps) {
   const { user, logout } = useAuth();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
-  const [mobileOpen, setMobileOpen] = useState(false);
+  const { mobileOpen, setMobileOpen } = useSidebar();
+
+  // 在非移动设备上导航时关闭侧边栏
+  useEffect(() => {
+    if (isMobile) {
+      setMobileOpen(false);
+    }
+  }, [location.pathname, isMobile, setMobileOpen]);
 
   const isAdmin = user?.role === 'admin';
 
   const menuItems = [
     { label: t('userNav.dashboard'), path: '/dashboard', icon: <LayoutDashboard size={20} /> },
     { label: t('nav.modelMarketplace'), path: '/models', icon: <ShoppingBag size={20} /> },
+    { label: t('userNav.chat', '聊天'), path: '/chat', icon: <MessageSquare size={20} /> },
     { label: t('actionMarketplace.title', 'Action Marketplace'), path: '/actions/marketplace', icon: <Zap size={20} /> },
     { label: t('userNav.apiKeys'), path: '/keys', icon: <Key size={20} /> },
     { label: t('userNav.invitation'), path: '/invitation', icon: <FileText size={20} /> },
@@ -243,7 +252,7 @@ export function UserLayout({ children }: UserLayoutProps) {
   );
 
   return (
-    <Box sx={{ display: 'flex', minHeight: '100vh' }}>
+    <Box sx={{ display: 'flex', minHeight: '100vh', maxWidth: '100vw', overflow: 'hidden' }}>
       {/* 桌面端侧边栏 */}
       {!isMobile && (
         <Drawer
@@ -290,56 +299,66 @@ export function UserLayout({ children }: UserLayoutProps) {
           flexGrow: 1,
           display: 'flex',
           flexDirection: 'column',
-          width: { md: `calc(100% - ${DRAWER_WIDTH}px)` },
+          width: { xs: '100vw', md: `calc(100vw - ${DRAWER_WIDTH}px)` },
           minHeight: '100vh',
+          maxWidth: { xs: '100vw', md: `calc(100vw - ${DRAWER_WIDTH}px)` },
+          overflow: 'hidden',
         }}
       >
-        {/* 顶部 AppBar */}
-        <AppBar 
-          position="sticky"
-          elevation={0}
-          sx={{
-            backgroundColor: 'background.paper',
-            color: 'text.primary',
-            borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
-          }}
-        >
-          <Toolbar>
-            {isMobile && (
-              <IconButton
-                color="inherit"
-                edge="start"
-                onClick={() => setMobileOpen(!mobileOpen)}
-                sx={{ mr: 2 }}
+        {/* 顶部 AppBar - 聊天页面不显示，因为有自己的顶部栏 */}
+        {location.pathname !== '/chat' && (
+          <AppBar 
+            position="sticky"
+            elevation={0}
+            sx={{
+              backgroundColor: 'background.paper',
+              color: 'text.primary',
+              borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
+              flexShrink: 0,
+            }}
+          >
+            <Toolbar>
+              {isMobile && (
+                <IconButton
+                  color="inherit"
+                  edge="start"
+                  onClick={() => setMobileOpen(true)}
+                  sx={{ mr: 2 }}
+                >
+                  <MenuIcon size={24} />
+                </IconButton>
+              )}
+              <Typography 
+                variant="h6" 
+                noWrap 
+                component="div" 
+                sx={{ 
+                  flexGrow: 1,
+                  fontWeight: 600,
+                  color: 'text.primary',
+                }}
               >
-                <MenuIcon size={24} />
-              </IconButton>
-            )}
-            <Typography 
-              variant="h6" 
-              noWrap 
-              component="div" 
-              sx={{ 
-                flexGrow: 1,
-                fontWeight: 600,
-                color: 'text.primary',
-              }}
-            >
-              {[...menuItems, ...accountItems].find((item) => item.path === location.pathname)?.label || 'Dashboard'}
-            </Typography>
-            {!isMobile && (
-              <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-                {user?.username}
+                {[...menuItems, ...accountItems].find((item) => item.path === location.pathname)?.label || 'Dashboard'}
               </Typography>
-            )}
-          </Toolbar>
-        </AppBar>
+              {!isMobile && (
+                <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+                  {user?.username}
+                </Typography>
+              )}
+            </Toolbar>
+          </AppBar>
+        )}
 
         {/* 内容区域 */}
         <Box sx={{ 
           flex: 1, 
-          p: { xs: 2, sm: 3 },
-          overflowY: 'auto',
+          display: 'flex',
+          flexDirection: 'column',
+          overflow: location.pathname === '/chat' ? 'hidden' : 'auto',
+          width: '100%',
+          minHeight: 0,
+          height: 0, // 强制使用 flex 计算高度
+          position: 'relative',
         }}>
           {children}
         </Box>

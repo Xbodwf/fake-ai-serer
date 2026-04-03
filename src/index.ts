@@ -1,11 +1,10 @@
 // 加载环境变量（必须在所有导入之前）
-import { config as dotenvConfig } from 'dotenv';
-dotenvConfig();
+import 'dotenv/config';
 
 import express, { Request, Response, Application, NextFunction } from 'express';
 import type { Message } from './types.js';
 import { initWebSocket, getConnectedClientsCount, broadcastModelsUpdate } from './websocket.js';
-import { initReverseWebSocket, hasReverseClients, broadcastRequestToReverseClients } from './reverseWebSocket.js';
+import { initReverseWebSocket, initNodeWebSocket, hasReverseClients, broadcastRequestToReverseClients } from './reverseWebSocket.js';
 import { createServer } from 'http';
 import { existsSync, mkdirSync } from 'fs';
 import { join } from 'path';
@@ -19,6 +18,8 @@ import {
   loadInvoices,
   loadActions,
   loadWorkflows,
+ loadProviders,
+ loadNodes,
   getServerConfig,
   getSettings,
   getAllModels,
@@ -93,6 +94,8 @@ async function initializeApp() {
     await loadInvoices();
     await loadActions();
     await loadWorkflows();
+ await loadProviders();
+ await loadNodes();
 
     // 初始化支付系统
     const db = getDB();
@@ -173,6 +176,11 @@ app.use('/api/auth', authRoutes);
 
 // ==================== 用户路由 ====================
 app.use('/api/user', authMiddleware, userRoutes);
+
+// ==================== 用户聊天路由 ====================
+// 使用 JWT 认证，专门用于前端 chatui
+import userChatRoutes from './routes/user-chat.js';
+app.use('/api/chat', authMiddleware, userChatRoutes);
 
 // ==================== 支付路由 ====================
 // 支付路由需要在初始化后才能使用，所以在 startServer 中动态挂载
@@ -372,12 +380,14 @@ async function start() {
   
   initWebSocket(server);
   initReverseWebSocket(server, '/reverse-ws');
+  initNodeWebSocket(server, '/node/ws');
   
   console.log('========================================');
   console.log('Phantom Mock 已启动');
   console.log('端口:', PORT);
   console.log('前端地址:', `http://localhost:${PORT}`);
   console.log('反向 WebSocket 地址:', `ws://localhost:${PORT}/reverse-ws`);
+ console.log('节点 WebSocket 地址:', `ws://localhost:${PORT}/node/ws`);
   console.log('========================================');
 
     // 启动 TCP 服务器（如果启用）

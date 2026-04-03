@@ -5,6 +5,9 @@
  * 在实际使用中，这些配置应该来自环境变量或配置文件。
  */
 
+// 确保环境变量已加载 - 使用 dotenv/config 自动加载
+import 'dotenv/config';
+
 import type { PaymentModuleConfig } from './types.js';
 
 console.log('[Payment Config] Loading config...');

@@ -4,7 +4,7 @@ import type { ChatCompletionRequest, PendingRequest, Message, Model } from '../.
 import { addPendingRequest, removePendingRequest } from '../../requestStore.js';
 import { generateRequestId } from '../../responseBuilder.js';
 import { broadcastRequest, getConnectedClientsCount } from '../../websocket.js';
-import { getModel, getAllModels, getPublicAndUserActions, validateApiKey, getAllApiKeys } from '../../storage.js';
+import { getModel, getAllModels, getPublicAndUserActions, validateApiKey, getAllApiKeys, selectProviderKeyRoundRobin, getProviderById } from '../../storage.js';
 import { isModelForwardingConfigured } from '../../forwarder.js';
 
 const router: RouterType = Router();
@@ -140,6 +140,34 @@ function generateEmbedding(text: string): number[] {
   return embedding;
 }
 
+async function resolveProviderRuntimeModel(model: Model): Promise<Model | null> {
+ if (model.forwardingMode !== 'provider') {
+ return model;
+ }
+
+ if (!model.providerId) {
+ return null;
+ }
+
+ const provider = getProviderById(model.providerId);
+ if (!provider || !provider.enabled) {
+ return null;
+ }
+
+ const selected = await selectProviderKeyRoundRobin(model.providerId);
+ if (!selected) {
+ return null;
+ }
+
+ return {
+ ...model,
+ api_key: selected.key.key,
+ api_base_url: selected.provider.api_base_url,
+ api_type: selected.provider.api_type,
+ api_url_templates: selected.provider.api_url_templates,
+ };
+}
+
 async function handleGeminiRequest(
   req: Request,
   res: Response,
@@ -200,11 +228,21 @@ async function handleGeminiRequest(
   };
 
   // 检查是否配置了转发
-  const hasForwarding = model ? isModelForwardingConfigured(model) : false;
+  const runtimeModel = await resolveProviderRuntimeModel(model);
+ if (model.forwardingMode === 'provider' && !runtimeModel) {
+ return res.status(502).json({
+ error: { code:502, message: 'Provider forwarding is not available', status: 'BAD_GATEWAY' }
+ });
+ }
+
+ // 检查是否配置了转发
+ const hasForwarding = model.forwardingMode === 'none'
+ ? false
+ : isModelForwardingConfigured(runtimeModel);
 
   if (hasForwarding) {
     // 配置了转发
-    console.log(`[Gemini Forwarder] 转发模式：${model.api_type || 'google'} API`);
+    console.log(`[Gemini Forwarder] 转发模式：${runtimeModel.api_type || 'google'} API`);
 
     // 导入转发函数
     const { forwardGeminiRequest, forwardGeminiStreamRequest } = await import('../../forwarder.js');
@@ -213,7 +251,7 @@ async function handleGeminiRequest(
       // 流式转发
       console.log('[Gemini Forwarder] 流式转发');
       try {
-        await forwardGeminiStreamRequest(model, body, res);
+        await forwardGeminiStreamRequest(runtimeModel, body, res);
       } catch (error: any) {
         console.error('[Gemini Forwarder] 流式转发失败:', error.message);
         if (!res.headersSent) {
@@ -257,7 +295,7 @@ async function handleGeminiRequest(
       broadcastRequest(pending);
 
       // 同时发起转发请求
-      const forwardPromise = forwardGeminiRequest(model, body);
+      const forwardPromise = forwardGeminiRequest(runtimeModel, body);
 
       // 竞速：用户回复 vs AI 转发
       const raceResult = await Promise.race([
