@@ -136,7 +136,7 @@ export function AdminNavBar() {
                               backgroundColor: location.pathname === item.path ? 'primary.main' : 'transparent',
                               color: location.pathname === item.path ? '#ffffff' : 'text.primary',
                               fontWeight: location.pathname === item.path ? 600 : 400,
-                              boxShadow: location.pathname === item.path ? '0 2px 8px rgba(0, 0, 0, 0.15)' : 'none',
+                              
                               '&:hover': {
                                 backgroundColor: location.pathname === item.path ? 'primary.dark' : 'action.hover',
                               },
@@ -354,15 +354,13 @@ export function AdminNavBar() {
     <Box
       sx={{
         width: sidebarCollapsed ? COLLAPSED_WIDTH : DRAWER_WIDTH,
-        height: 'auto',
-        maxHeight: '90vh',
+        height: '100vh',
         position: 'fixed',
-        left: { xs: 0, md: 20 },
-        top: '50%',
-        transform: 'translateY(-50%)',
+        left: 0,
+        top: 0,
         backgroundColor: 'background.paper',
-        borderRadius: 3,
-        boxShadow: '0 4px 20px rgba(0, 0, 0, 0.08)',
+        borderRadius: 0,
+        
         border: '1px solid',
         borderColor: 'divider',
         zIndex: (theme) => theme.zIndex.drawer,

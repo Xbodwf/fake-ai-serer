@@ -253,15 +253,14 @@ export function UserLayout({ children }: UserLayoutProps) {
         <Box
           sx={{
             width: sidebarCollapsed ? COLLAPSED_WIDTH : DRAWER_WIDTH,
-            height: 'auto',
+            height: '100vh',
             maxHeight: '90vh',
             position: 'fixed',
-            left: 20,
-            top: '50%',
-            transform: 'translateY(-50%)',
+            left: 0,
+            top: 0,
             backgroundColor: 'background.paper',
-            borderRadius: 3,
-            boxShadow: '0 4px 20px rgba(0, 0, 0, 0.08)',
+            borderRadius: 0,
+            
             border: '1px solid',
             borderColor: 'divider',
             zIndex: (theme) => theme.zIndex.drawer,
