@@ -315,6 +315,67 @@ export function UserLayout({ children }: UserLayoutProps) {
         </Box>
       )}
 
+      {/* 桌面端顶栏 - 展开时也显示，包含用户头像 */}
+      {!isMobile && !sidebarCollapsed && location.pathname !== '/chat' && (
+        <Box
+          sx={{
+            position: 'fixed',
+            top: 0,
+            left: DRAWER_WIDTH,
+            right: 0,
+            zIndex: (theme) => theme.zIndex.appBar,
+            backgroundColor: 'background.paper',
+            borderBottom: '1px solid',
+            borderColor: 'divider',
+            px: 2,
+            py: 1,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'flex-end',
+          }}
+        >
+          <Stack direction="row" spacing={1} alignItems="center">
+            <LanguageSwitcher />
+            <ThemeSwitcher />
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, cursor: 'pointer' }} onClick={handleUserMenuOpen}>
+              <Avatar sx={{ width: 36, height: 36, bgcolor: 'primary.main' }}>
+                {user?.username?.charAt(0)?.toUpperCase() || 'U'}
+              </Avatar>
+              <ChevronDown size={16} style={{ color: 'currentColor' }} />
+            </Box>
+          </Stack>
+          <Menu
+            anchorEl={userMenuAnchor}
+            open={Boolean(userMenuAnchor)}
+            onClose={handleUserMenuClose}
+            anchorOrigin={{
+              vertical: 'bottom',
+              horizontal: 'right',
+            }}
+            transformOrigin={{
+              vertical: 'top',
+              horizontal: 'right',
+            }}
+          >
+            <MenuItem onClick={() => { handleNavigate('/profile'); handleUserMenuClose(); }}>
+              <User size={18} style={{ marginRight: 12 }} />
+              {t('userNav.profile')}
+            </MenuItem>
+            {isAdmin && (
+              <MenuItem onClick={() => { handleNavigate('/console/dashboard'); handleUserMenuClose(); }}>
+                <SettingsIcon size={18} style={{ marginRight: 12 }} />
+                {t('userNav.adminConsole')}
+              </MenuItem>
+            )}
+            <Divider />
+            <MenuItem onClick={() => { handleLogout(); handleUserMenuClose(); }} sx={{ color: 'error.main' }}>
+              <LogOut size={18} style={{ marginRight: 12 }} />
+              {t('common.logout')}
+            </MenuItem>
+          </Menu>
+        </Box>
+      )}
+
       {/* 移动端抽屉 */}
       {isMobile && (
         <Drawer
