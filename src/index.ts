@@ -182,14 +182,13 @@ app.use('/api/user', authMiddleware, userRoutes);
 import userChatRoutes from './routes/user-chat.js';
 app.use('/api/chat', authMiddleware, userChatRoutes);
 
-// ==================== 聊天会话管理路由 ====================
-import chatSessionsRoutes from './routes/chatSessions.js';
+// ==================== 统一会话管理路由 ====================
+// 所有聊天会话 API 统一在 /api/session/* 下
+// GET /api/session/:id 支持可选认证（公开会话无需认证）
+// 其他操作需要认证
+import sessionRoutes from './routes/session.js';
 import { optionalAuthMiddleware } from './middleware.js';
-// 公开会话访问无需认证，但私有会话需要认证
-// GET 请求使用可选认证，其他请求需要认证
-app.use('/api/chat-sessions', optionalAuthMiddleware, chatSessionsRoutes);
-// 会话创建路由（使用 /api/sessions/new）需要 JWT 认证
-app.use('/api/sessions', authMiddleware, chatSessionsRoutes);
+app.use('/api/session', optionalAuthMiddleware, sessionRoutes);
 
 // ==================== 支付路由 ====================
 // 支付路由需要在初始化后才能使用，所以在 startServer 中动态挂载

@@ -14,6 +14,8 @@ type ChatSession = {
   updatedAt: number;
   isPublic: boolean;
   ownerId: string;
+  // 权限信息 - 从服务器返回
+  isOwner?: boolean;
   isReadOnly?: boolean;
 };
 
@@ -43,16 +45,15 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   const [sessionsLoading, setSessionsLoading] = useState(false);
   const { user, token } = useAuth();
 
-  // 从服务器加载会话列表
-  const loadSessionsFromServer = useCallback(async () => {
+  // 从服务器加载会话列表，返回加载的会话
+  const loadSessionsFromServer = useCallback(async (): Promise<ChatSession[]> => {
     if (!user || !token) {
-      setSessions([]);
-      return;
+      return [];
     }
 
     setSessionsLoading(true);
     try {
-      const response = await fetch('/api/chat-sessions', {
+      const response = await fetch('/api/session/list', {
         headers: {
           'Authorization': `Bearer ${token}`,
         },
@@ -60,12 +61,14 @@ export function ChatProvider({ children }: { children: ReactNode }) {
 
       if (response.ok) {
         const data = await response.json();
-        setSessions(data);
+        return data;
       } else {
         console.error('Failed to load sessions from server:', response.statusText);
+        return [];
       }
     } catch (error) {
       console.error('Failed to load sessions from server:', error);
+      return [];
     } finally {
       setSessionsLoading(false);
     }
@@ -79,7 +82,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         headers['Authorization'] = `Bearer ${token}`;
       }
 
-      const response = await fetch(`/api/chat-sessions/${sessionId}`, {
+      const response = await fetch(`/api/session/${sessionId}`, {
         headers,
       });
 
@@ -103,7 +106,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     }
 
     try {
-      const response = await fetch('/api/sessions/new', {
+      const response = await fetch('/api/session', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -121,14 +124,12 @@ export function ChatProvider({ children }: { children: ReactNode }) {
 
       if (response.ok) {
         const sessionData = await response.json();
-        // 确保 isReadOnly 字段存在
-        const sessionWithReadOnly = {
-          ...sessionData,
-          isReadOnly: sessionData.isReadOnly ?? false,
-        };
-        setSessions((prev) => [...prev, sessionWithReadOnly]);
-        setCurrentSessionId(sessionWithReadOnly.id);
-        return sessionWithReadOnly;
+        console.log('[ChatContext] Session created:', sessionData.id);
+        // 立即设置当前会话ID
+        setCurrentSessionId(sessionData.id);
+        // 然后添加到会话列表
+        setSessions((prev) => [...prev, sessionData]);
+        return sessionData;
       } else {
         console.error('Failed to create session:', response.statusText);
         return null;
@@ -146,7 +147,8 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     }
 
     try {
-      const response = await fetch(`/api/chat-sessions/${sessionId}`, {
+      console.log('[ChatContext] Deleting session:', sessionId);
+      const response = await fetch(`/api/session/${sessionId}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -156,9 +158,13 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       if (response.ok) {
         setSessions((prev) => {
           const filtered = prev.filter((s) => s.id !== sessionId);
+          console.log('[ChatContext] Session deleted, remaining sessions:', filtered.length);
+
           if (currentSessionId === sessionId && filtered.length > 0) {
+            console.log('[ChatContext] Auto-switching to session:', filtered[0].id);
             setCurrentSessionId(filtered[0].id);
           } else if (currentSessionId === sessionId) {
+            console.log('[ChatContext] No sessions left, clearing current session ID');
             setCurrentSessionId(null);
           }
           return filtered;
@@ -181,7 +187,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     }
 
     try {
-      const response = await fetch(`/api/chat-sessions/${sessionId}`, {
+      const response = await fetch(`/api/session/${sessionId}`, {
         method: 'PUT',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -191,6 +197,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       });
 
       if (response.ok) {
+        console.log('[ChatContext] Session updated:', sessionId, 'fields:', Object.keys(updates));
         setSessions((prev) =>
           prev.map((s) => {
             if (s.id === sessionId) {
@@ -210,13 +217,19 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     }
   }, [token]);
 
-  // 用户登录时加载会话列表
+  // 用户登录时加载自己的会话列表
+  // 注意：登录后只添加自己的会话，保留之前通过URL加载的公开会话
   useEffect(() => {
     if (user && token) {
-      loadSessionsFromServer();
-    } else {
-      setSessions([]);
-      setCurrentSessionId(null);
+      loadSessionsFromServer().then((ownSessions) => {
+        // 只更新自己的会话，保留已加载的公开会话
+        setSessions((prevSessions) => {
+          // 保留所有非自己的会话（即已加载的公开会话）
+          const publicSessions = prevSessions.filter((s) => s.ownerId !== user.id);
+          // 合并：先是自己的会话，再是公开会话
+          return [...(ownSessions || []), ...publicSessions];
+        });
+      });
     }
   }, [user, token, loadSessionsFromServer]);
 

@@ -112,6 +112,10 @@ type ChatSession = {
   messages: ChatMessage[];
   createdAt: number;
   updatedAt: number;
+  isPublic?: boolean;
+  ownerId?: string;
+  isOwner?: boolean;
+  isReadOnly?: boolean;
 };
 
 // ==================== 常量 ====================
@@ -898,101 +902,101 @@ export function UserChatPage() {
       setError(t('chat.loginRequired', '请先登录'));
       return;
     }
-    if (!models || models.length === 0) {
-      setError(t('chat.noModelsConfig'));
-      return;
-    }
     setError(''); // 清除错误提示
     const newSession = await createNewSession();
     if (newSession) {
       await updateSession(newSession.id, {
         title: t('chat.newSession', '新对话'),
-        model: models[0].id,
+        // 不设置初始模型，用户需要在首次聊天时选择
+        model: '',
       });
       // 确保 isReadOnly 在更新会话后设置为 false
       setIsReadOnly(false);
     }
-  }, [models, t, createNewSession, updateSession, user]);
+  }, [t, createNewSession, updateSession, user]);
 
-  // ==================== 处理 URL 参数和只读模式 ====================
+  // ==================== 处理 URL 参数和会话加载 ====================
 
+  // 处理 URL 中的会话 ID
   useEffect(() => {
+    // 如果没有 URL 参数，只在首次加载且没有当前会话时处理
+    if (!sessionIdFromUrl) {
+      // 只在真正需要时才设置会话ID，避免干扰其他操作
+      return;
+    }
+
+    // 有 URL 参数，尝试加载指定会话
+    console.log(`[Chat] Loading session from URL: ${sessionIdFromUrl}`);
+
+    // 先检查会话是否已经在列表中
+    const existingSession = sessions.find((s) => s.id === sessionIdFromUrl);
+    if (existingSession) {
+      // 已经加载过，直接使用
+      console.log(`[Chat] Session already loaded: ${sessionIdFromUrl}`);
+      setCurrentSessionId(sessionIdFromUrl);
+      setError('');
+      return;
+    }
+
+    // 会话不在列表中，从服务器加载
+    setCurrentSessionId(sessionIdFromUrl);
+    loadSessionFromServer(sessionIdFromUrl)
+      .then((sessionData) => {
+        if (!sessionData) {
+          // 会话不存在或无权限
+          console.log(`[Chat] Session not found or no permission: ${sessionIdFromUrl}`);
+          setError(t('chat.sessionNotFound', '会话不存在或无权限访问'));
+          return;
+        }
+
+        console.log(`[Chat] Session loaded: isOwner=${sessionData.isOwner}, isReadOnly=${sessionData.isReadOnly}, messages=${sessionData.messages?.length || 0}`);
+        setError(''); // 清除错误
+
+        // 关键：添加到本地会话列表，以便 currentSession 能找到
+        setSessions((prev) => [...prev, sessionData]);
+      })
+      .catch((err) => {
+        console.error(`[Chat] Error loading session: ${err}`);
+        setError(t('chat.sessionNotFound', '会话不存在或无权限访问'));
+      });
+  }, [sessionIdFromUrl, loadSessionFromServer]); // 移除 sessions 依赖，避免重复触发
+
+  // 单独的 useEffect 用于初始化时自动选择会话
+  useEffect(() => {
+    // 只在没有 URL 参数时执行
     if (sessionIdFromUrl) {
-      // 从 URL 获取会话 ID
-      const session = sessions.find((s) => s.id === sessionIdFromUrl);
-      if (session) {
-        setCurrentSessionId(sessionIdFromUrl);
-        // 会话在本地，但仍需从服务器确认权限并更新数据
-        loadSessionFromServer(sessionIdFromUrl).then((sessionData) => {
-          if (sessionData) {
-            setError(''); // 清除错误提示
-            // 更新本地会话数据
-            setSessions((prev) =>
-              prev.map((s) => (s.id === sessionData.id ? sessionData : s))
-            );
-            if ('isReadOnly' in sessionData) {
-              setIsReadOnly(sessionData.isReadOnly);
-            } else {
-              const isOwner = user?.id === sessionData.ownerId;
-              setIsReadOnly(!isOwner);
-            }
-          }
-        });
-      } else {
-        // 会话不在本地，从服务器获取
-        loadSessionFromServer(sessionIdFromUrl).then((sessionData) => {
-          if (sessionData) {
-            setCurrentSessionId(sessionIdFromUrl);
-            setError(''); // 清除错误提示
-            // 添加到本地会话列表
-            setSessions((prev) => [...prev, sessionData]);
-            if ('isReadOnly' in sessionData) {
-              setIsReadOnly(sessionData.isReadOnly);
-            } else {
-              const isOwner = user?.id === sessionData.ownerId;
-              setIsReadOnly(!isOwner);
-            }
-          } else {
-            // 会话不存在或无权限
-            setIsReadOnly(true);
-            setError(t('chat.sessionNotFound', '会话不存在或无权限访问'));
-          }
-        });
-      }
-    } else if (!currentSessionId && sessions.length > 0) {
-      // 如果没有 URL 参数且没有当前会话，使用第一个会话
+      return;
+    }
+
+    // 如果没有当前会话，但有会话列表，选择第一个
+    if (!currentSessionId && sessions.length > 0) {
+      console.log(`[Chat] Auto-selecting first session: ${sessions[0].id}`);
       setCurrentSessionId(sessions[0].id);
-      setError(''); // 清除错误提示
-      // 从服务器加载第一个会话以确认权限
-      if (user && sessions[0].ownerId === user.id) {
-        loadSessionFromServer(sessions[0].id).then((sessionData) => {
-          if (sessionData && 'isReadOnly' in sessionData) {
-            setIsReadOnly(sessionData.isReadOnly);
-          }
-        });
-      }
-    } else if (!currentSessionId && !sessionIdFromUrl) {
-      // 如果没有任何会话且没有URL参数，创建新会话
-      setError(''); // 清除错误提示
+      setError('');
+    } else if (!currentSessionId && sessions.length === 0 && user) {
+      // 如果没有任何会话且用户已登录，创建新会话
+      console.log(`[Chat] No sessions, creating new session`);
+      setError('');
       handleCreateNewSession();
     }
-  }, [sessionIdFromUrl, sessions, currentSessionId, user?.id, handleCreateNewSession, loadSessionFromServer, t]);
+  }, [sessionIdFromUrl, currentSessionId, sessions.length, user, handleCreateNewSession]);
 
   // 监听 currentSessionId 变化，更新只读状态
   useEffect(() => {
-    if (currentSessionId) {
-      const session = sessions.find((s) => s.id === currentSessionId);
-      if (session) {
-        if ('isReadOnly' in session) {
-          setIsReadOnly(session.isReadOnly);
-        } else {
-          const isOwner = user?.id === session.ownerId;
-          setIsReadOnly(!isOwner);
-        }
-        setError(''); // 找到会话时清除错误提示
-      }
+    if (!currentSessionId) return;
+
+    const session = sessions.find((s) => s.id === currentSessionId);
+    if (!session) {
+      console.log(`[Chat] Session not found in list: ${currentSessionId}`);
+      return;
     }
-  }, [currentSessionId, sessions, user?.id]);
+
+    // 从会话数据中获取权限信息（服务器已经计算过）
+    const readonly = session.isReadOnly ?? false;
+    console.log(`[Chat] Session changed: id=${currentSessionId}, isReadOnly=${readonly}, messages=${session.messages?.length || 0}`);
+    setIsReadOnly(readonly);
+    setError('');
+  }, [currentSessionId, sessions]);
 
   const handleDeleteSession = useCallback(
     async (sessionId: string) => {
@@ -1499,17 +1503,30 @@ export function UserChatPage() {
     } finally {
       setLoading(false);
       setAbortController(null);
-      
+
       // 将更新后的会话同步到服务器
+      // 使用函数式更新来获取最新的会话状态
       if (currentSessionId) {
-        const updatedSession = sessions.find(s => s.id === currentSessionId);
-        if (updatedSession) {
-          updateSession(currentSessionId, updatedSession).catch(err => {
-            console.error('Failed to sync session to server:', err);
-          });
-        }
+        setSessions(prevSessions => {
+          const updatedSession = prevSessions.find(s => s.id === currentSessionId);
+          if (updatedSession) {
+            // 同步完整的会话数据到服务器
+            updateSession(currentSessionId, {
+              messages: updatedSession.messages,
+              title: updatedSession.title,
+              model: updatedSession.model,
+              systemPrompt: updatedSession.systemPrompt,
+              apiType: updatedSession.apiType,
+              stream: updatedSession.stream,
+              timeout: updatedSession.timeout,
+            }).catch(err => {
+              console.error('Failed to sync session to server:', err);
+            });
+          }
+          return prevSessions; // 返回不变的状态
+        });
       }
-      
+
       // 检查队列中是否有待发送的消息
       if (messageQueue.length > 0 && currentSessionId) {
         setTimeout(() => {
@@ -1529,7 +1546,7 @@ export function UserChatPage() {
     [sendMessage]
   );
 
-  // ==================== 渲染侧边栏 ====================
+  // ==================== 渲染侧边�� ====================
 
   const drawerContent = (
     <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
@@ -1900,10 +1917,10 @@ export function UserChatPage() {
                 </Tooltip>
 
                 {/* 模型选择 */}
-                <Tooltip title={currentSession.model}>
+                <Tooltip title={currentSession.model || t('chat.selectModel', '选择模型')}>
                   <Chip
                     size="small"
-                    label={currentSession.model}
+                    label={currentSession.model || t('chat.selectModel', '选择模型')}
                     onClick={(e) => setModelAnchor(e.currentTarget)}
                     icon={<Sparkles size={14} />}
                     deleteIcon={<ChevronDown size={14} />}
@@ -1913,6 +1930,7 @@ export function UserChatPage() {
                       borderRadius: '8px',
                       cursor: 'pointer',
                       maxWidth: 150,
+                      opacity: currentSession.model ? 1 : 0.7,
                       '& .MuiChip-label': {
                         overflow: 'hidden',
                         textOverflow: 'ellipsis',
@@ -1996,20 +2014,31 @@ export function UserChatPage() {
         PaperProps={{ sx: { borderRadius: '12px', maxHeight: 300, minWidth: 200 } }}
       >
         <List dense sx={{ py: 0.5 }}>
-          {models.map((model) => (
-            <ListItem key={model.id} disablePadding>
-              <ListItemButton
-                selected={currentSession?.model === model.id}
-                onClick={() => updateCurrentModel(model.id)}
-                sx={{ borderRadius: '8px', mx: 0.5, my: 0.25 }}
-              >
-                <ListItemText
-                  primary={model.id}
-                  primaryTypographyProps={{ fontSize: '0.875rem' }}
-                />
-              </ListItemButton>
+          {models.length === 0 ? (
+            <ListItem disablePadding>
+              <Box sx={{ p: 2, textAlign: 'center', color: 'text.secondary', width: '100%' }}>
+                <Typography variant="body2">{t('chat.noModelsConfig', '暂无可用模型')}</Typography>
+                <Typography variant="caption" sx={{ display: 'block', mt: 1 }}>
+                  {t('chat.selectModelOnSend', '首次发送消息时可选择模型')}
+                </Typography>
+              </Box>
             </ListItem>
-          ))}
+          ) : (
+            models.map((model) => (
+              <ListItem key={model.id} disablePadding>
+                <ListItemButton
+                  selected={currentSession?.model === model.id}
+                  onClick={() => updateCurrentModel(model.id)}
+                  sx={{ borderRadius: '8px', mx: 0.5, my: 0.25 }}
+                >
+                  <ListItemText
+                    primary={model.id}
+                    primaryTypographyProps={{ fontSize: '0.875rem' }}
+                  />
+                </ListItemButton>
+              </ListItem>
+            ))
+          )}
         </List>
       </Popover>
 
@@ -2068,7 +2097,7 @@ export function UserChatPage() {
                 const link = `${window.location.origin}/chat/session/${currentSession.id}`;
                 try {
                   await copyToClipboard(link);
-                  setSnackbar({ open: true, message: t('chat.linkCopied', '链接已复制') });
+                  setSnackbar({ open: true, message: t('chat.linkCopied', '链���已复制') });
                 } catch (e) {
                   console.error('Failed to copy link:', e);
                 }
@@ -2154,14 +2183,20 @@ export function UserChatPage() {
             variant="outlined"
           />
 
-          <FormControl fullWidth sx={{ mt: 2 }}>
+          <FormControl fullWidth sx={{ mt: 2 }} disabled={models.length === 0}>
             <InputLabel>{t('chat.model', '模型')}</InputLabel>
             <Select value={editingModel} label={t('chat.model', '模型')} onChange={(e) => setEditingModel(e.target.value)}>
-              {models.map((model) => (
-                <MenuItem key={model.id} value={model.id}>
-                  {model.id}
+              {models.length === 0 ? (
+                <MenuItem disabled value="">
+                  {t('chat.noModelsConfig', '暂无可用模型')}
                 </MenuItem>
-              ))}
+              ) : (
+                models.map((model) => (
+                  <MenuItem key={model.id} value={model.id}>
+                    {model.id}
+                  </MenuItem>
+                ))
+              )}
             </Select>
           </FormControl>
 
