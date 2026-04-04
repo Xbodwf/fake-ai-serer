@@ -87,5 +87,11 @@ export async function initializeIndexes(): Promise<void> {
  await createIndexSafe('payment_orders', { userId:1, createdAt: -1 });
  await createIndexSafe('payment_orders', { status:1 });
 
+ // ChatSessions indexes
+ await createIndexSafe('chatSessions', { id:1 }, { unique: true });
+ await createIndexSafe('chatSessions', { ownerId:1 });
+ await createIndexSafe('chatSessions', { isPublic:1 });
+ await createIndexSafe('chatSessions', { updatedAt: -1 });
+
  console.log('Database indexes initialized successfully');
 }

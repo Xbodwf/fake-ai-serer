@@ -9,6 +9,13 @@ import { calculateCost, calculateTokens } from '../billing.js';
 import { forwardChatRequest, forwardStreamRequest, isModelForwardingConfigured, shouldUseNodeForwarding, hideKey, resolveForwardUrl, getForwardModelName } from '../forwarder.js';
 import { sendRequestToNode, isNodeConnected } from '../reverseWebSocket.js';
 import { getContentString, extractApiKey } from '../routes/v1/utils.js';
+import {
+  createChatSession,
+  getChatSessionById,
+  updateChatSession,
+  deleteChatSession,
+  getUserChatSessions
+} from '../db/chatSessions.js';
 
 const router: Router = Router();
 
@@ -529,5 +536,204 @@ async function handleUserChatRequest(
     }
   }
 }
+
+/**
+ * POST /api/chat/sessions - 创建新会话
+ */
+router.post('/sessions', async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = req.userId;
+    const user = req.user;
+    const body = req.body;
+
+    if (!userId) {
+      return res.status(401).json({
+        error: {
+          message: 'Authentication required',
+          type: 'authentication_error',
+        }
+      });
+    }
+
+    const newSession = {
+      id: Date.now().toString(),
+      title: body.title || '新对话',
+      model: body.model || '',
+      systemPrompt: body.systemPrompt || 'You are a helpful AI assistant.',
+      apiType: body.apiType || 'openai-chat',
+      stream: body.stream !== false,
+      timeout: body.timeout || 60,
+      messages: [],
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+      isPublic: false,
+      ownerId: user?.id || 'anonymous',
+    };
+
+    await createChatSession(newSession);
+    return res.status(201).json(newSession);
+  } catch (error) {
+    console.error('Error creating chat session:', error);
+    res.status(500).json({
+      error: {
+        message: 'Internal server error',
+        type: 'server_error'
+      }
+    });
+  }
+});
+
+/**
+ * GET /api/chat/sessions - 获取用户的所有会话
+ */
+router.get('/sessions', async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = req.userId;
+
+    if (!userId) {
+      return res.status(401).json({
+        error: {
+          message: ' authentication required',
+          type: 'authentication_error',
+        }
+      });
+    }
+
+    const sessions = await getUserChatSessions(userId);
+    return res.json(sessions);
+  } catch (error) {
+    console.error('Error fetching chat sessions:', error);
+    res.status(500).json({
+      error: {
+        message: 'Internal server error',
+        type: 'server_error'
+      }
+    });
+  }
+});
+
+/**
+ * PUT /api/chat/sessions/:id - 更新会话
+ */
+router.put('/sessions/:id', async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = req.userId;
+    const { id } = req.params;
+    const updates = req.body;
+
+    if (!userId) {
+      return res.status(401).json({
+        error: {
+          message: 'Authentication required',
+          type: 'authentication_error',
+        }
+      });
+    }
+
+    const session = await getChatSessionById(id);
+    
+    if (!session) {
+      return res.status(404).json({
+        error: {
+          message: 'Chat session not found',
+          type: 'not_found_error'
+        }
+      });
+    }
+
+    // 检查权限
+    if (session.ownerId !== userId) {
+      return res.status(403).json({
+        error: {
+          message: 'You do not have permission to modify this session',
+          type: 'permission_error'
+        }
+      });
+    }
+
+    const success = await updateChatSession(id, updates);
+    
+    if (success) {
+      const updatedSession = await getChatSessionById(id);
+      return res.json(updatedSession);
+    } else {
+      return res.status(500).json({
+        error: {
+          message: 'Failed to update session',
+          type: 'internal_error'
+        }
+      });
+    }
+  } catch (error) {
+    console.error('Error updating chat session:', error);
+    res.status(500).json({
+      error: {
+        message: 'Internal server error',
+        type: 'server_error'
+      }
+    });
+  }
+});
+
+/**
+ * DELETE /api/chat/sessions/:id - 删除会话
+ */
+router.delete('/sessions/:id', async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = req.userId;
+    const { id } = req.params;
+
+    if (!userId) {
+      return res.status(401).json({
+        error: {
+          message: 'Authentication required',
+          type: 'authentication_error',
+        }
+      });
+    }
+
+    const session = await getChatSessionById(id);
+    
+    if (!session) {
+      return res.status(404).json({
+        error: {
+          message: 'Chat session not found',
+          type: 'not_found_error'
+        }
+      });
+    }
+
+    // 检查权限
+    if (session.ownerId !== userId) {
+      return res.status(403).json({
+        error: {
+          message: 'You do not have permission to delete this session',
+          type: 'permission_error'
+        }
+      });
+    }
+
+    const success = await deleteChatSession(id);
+    
+    if (success) {
+      return res.json({ success: true });
+    } else {
+      return res.status(500).json({
+        error: {
+          message: 'Failed to delete session',
+          type: 'internal_error'
+        }
+      });
+    }
+  } catch (error) {
+    console.error('Error deleting chat session:', error);
+    res.status(500).json({
+      error: {
+        message: 'Internal server error',
+        type: 'server_error'
+      }
+    });
+  }
+});
 
 export default router;

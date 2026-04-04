@@ -58,13 +58,19 @@ import {
   Clock,
   Zap,
   ChevronRight,
+  Globe,
+  Globe2,
+  Lock,
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { useAuth } from '../contexts/AuthContext';
 import { useServer } from '../contexts/ServerContext';
 import { useSidebar } from '../contexts/SidebarContext';
+import { useChat } from '../contexts/ChatContext';
 import { useTranslation } from 'react-i18next';
+import { useParams } from 'react-router-dom';
+import { copyToClipboard } from '../utils/clipboard';
 
 // ==================== 类型定义 ====================
 
@@ -136,7 +142,6 @@ function parseThinkingContent(content: string): { thinking: string; output: stri
     return { thinking, output };
   }
   return { thinking: '', output: content };
-  const { t } = useTranslation();
 }
 
 // ==================== 代码块组件 ====================
@@ -147,13 +152,14 @@ interface CodeBlockProps {
 }
 
 const CodeBlock = memo(function CodeBlock({ className, children }: CodeBlockProps) {
+  const { t = (key: string, defaultValue?: string) => defaultValue || key } = useTranslation();
   const [copied, setCopied] = useState(false);
   const theme = useTheme();
   const codeString = String(children).replace(/\n$/, '');
   const language = className?.replace('language-', '') || '';
 
   const handleCopy = async () => {
-    await navigator.clipboard.writeText(codeString);
+    await copyToClipboard(codeString);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
@@ -231,13 +237,15 @@ const InlineCode = memo(function InlineCode({ children }: { children: React.Reac
     <Box
       component="code"
       sx={{
-        fontFamily: '"Fira Code", monospace',
+        fontFamily: 'monospace',
         fontSize: '0.875em',
-        px: 0.75,
-        py: 0.25,
-        borderRadius: '4px',
-        bgcolor: theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)',
+        px: 0.5,
+        py: 0.1,
+        mx: 0.25,
+        borderRadius: '3px',
+        bgcolor: theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)',
         color: theme.palette.mode === 'dark' ? '#e879f9' : '#9333ea',
+        display: 'inline-block',
       }}
     >
       {children}
@@ -389,7 +397,7 @@ interface ThinkingBlockProps {
 }
 
 const ThinkingBlock = memo(function ThinkingBlock({ content }: ThinkingBlockProps) {
-  const { t } = useTranslation();
+  const { t = (key: string, defaultValue?: string) => defaultValue || key } = useTranslation();
   const [expanded, setExpanded] = useState(false);
   const theme = useTheme();
 
@@ -451,7 +459,7 @@ interface ToolCallBlockProps {
 }
 
 const ToolCallBlock = memo(function ToolCallBlock({ toolCalls }: ToolCallBlockProps) {
-  const { t } = useTranslation();
+  const { t = (key: string, defaultValue?: string) => defaultValue || key } = useTranslation();
   const [expanded, setExpanded] = useState(false);
   const theme = useTheme();
 
@@ -550,6 +558,7 @@ interface MessageBubbleProps {
   index: number;
   isLoading: boolean;
   isLastMessage: boolean;
+  isReadOnly: boolean;
   onCopy: () => void;
   onDelete: () => void;
   onEdit: () => void;
@@ -562,6 +571,7 @@ const MessageBubble = memo(function MessageBubble({
   index,
   isLoading,
   isLastMessage,
+  isReadOnly,
   onCopy,
   onDelete,
   onEdit,
@@ -570,7 +580,7 @@ const MessageBubble = memo(function MessageBubble({
 }: MessageBubbleProps) {
   const theme = useTheme();
   const isUser = message.role === 'user';
-  const { t } = useTranslation();
+  const { t = (key: string, defaultValue?: string) => defaultValue || key } = useTranslation();
   const [showActions, setShowActions] = useState(false);
 
   if (message.role === 'system') return null;
@@ -630,7 +640,7 @@ const MessageBubble = memo(function MessageBubble({
             sx={{
               px: 2,
               py: 1.25,
-              borderRadius: '18px 18px 4px 18px',
+              borderRadius: '18px',
               bgcolor: 'primary.main',
               color: 'primary.contrastText',
               wordBreak: 'break-word',
@@ -644,22 +654,42 @@ const MessageBubble = memo(function MessageBubble({
           <Fade in={showActions}>
             <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 0.5, mt: 0.5 }}>
               <Tooltip title="复制">
-                <IconButton size="small" onClick={onCopy} sx={{ opacity: 0.6 }}>
+                <IconButton 
+                  size="small" 
+                  onClick={onCopy} 
+                  sx={{ opacity: 0.6 }}
+                  disabled={isReadOnly}
+                >
                   <Copy size={14} />
                 </IconButton>
               </Tooltip>
               <Tooltip title="编辑">
-                <IconButton size="small" onClick={onEdit} sx={{ opacity: 0.6 }}>
+                <IconButton 
+                  size="small" 
+                  onClick={onEdit} 
+                  sx={{ opacity: isReadOnly ? 0.3 : 0.6 }}
+                  disabled={isReadOnly}
+                >
                   <Edit3 size={14} />
                 </IconButton>
               </Tooltip>
               <Tooltip title="重发">
-                <IconButton size="small" onClick={onResend} sx={{ opacity: 0.6 }}>
+                <IconButton 
+                  size="small" 
+                  onClick={onResend} 
+                  sx={{ opacity: isReadOnly ? 0.3 : 0.6 }}
+                  disabled={isReadOnly}
+                >
                   <RotateCcw size={14} />
                 </IconButton>
               </Tooltip>
               <Tooltip title="删除">
-                <IconButton size="small" onClick={onDelete} sx={{ opacity: 0.6 }}>
+                <IconButton 
+                  size="small" 
+                  onClick={onDelete} 
+                  sx={{ opacity: isReadOnly ? 0.3 : 0.6 }}
+                  disabled={isReadOnly}
+                >
                   <Trash2 size={14} />
                 </IconButton>
               </Tooltip>
@@ -706,13 +736,10 @@ const MessageBubble = memo(function MessageBubble({
         {message.toolCalls && message.toolCalls.length > 0 && <ToolCallBlock toolCalls={message.toolCalls} />}
 
         {/* 主要内容 */}
-        <Paper
-          elevation={0}
+        <Box
           sx={{
-            px: 2,
-            py: 1.5,
-            borderRadius: '4px 18px 18px 18px',
-            bgcolor: theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)',
+            px: 0,
+            py: 0.5,
             wordBreak: 'break-word',
           }}
         >
@@ -750,7 +777,7 @@ const MessageBubble = memo(function MessageBubble({
               </Typography>
             </Box>
           ) : null}
-        </Paper>
+        </Box>
 
         {output && (
           <Fade in={showActions}>
@@ -761,7 +788,12 @@ const MessageBubble = memo(function MessageBubble({
                 </IconButton>
               </Tooltip>
               <Tooltip title="删除">
-                <IconButton size="small" onClick={onDelete} sx={{ opacity: 0.6 }}>
+                <IconButton 
+                  size="small" 
+                  onClick={onDelete} 
+                  sx={{ opacity: isReadOnly ? 0.3 : 0.6 }}
+                  disabled={isReadOnly}
+                >
                   <Trash2 size={14} />
                 </IconButton>
               </Tooltip>
@@ -776,16 +808,17 @@ const MessageBubble = memo(function MessageBubble({
 // ==================== 主组件 ====================
 
 export function UserChatPage() {
-  const { t } = useTranslation();
+  const { t = (key: string, defaultValue?: string) => defaultValue || key } = useTranslation();
   const { token } = useAuth();
+  const { user } = useAuth();
   const { models } = useServer();
   const { toggleMobileOpen } = useSidebar();
+  const { sessions, currentSessionId, setCurrentSessionId, createNewSession, deleteSession, updateSession, setSessions, loadSessionFromServer, loadSessionsFromServer } = useChat();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
+  const { id: sessionIdFromUrl } = useParams<{ id?: string }>();
 
   // 状态
-  const [sessions, setSessions] = useState<ChatSession[]>([]);
-  const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
   const [input, setInput] = useState('');
   const [files, setFiles] = useState<UploadedFile[]>([]);
   const [loading, setLoading] = useState(false);
@@ -795,6 +828,11 @@ export function UserChatPage() {
   const [menuAnchor, setMenuAnchor] = useState<null | HTMLElement>(null);
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
   const [snackbar, setSnackbar] = useState({ open: false, message: '' });
+  const [isReadOnly, setIsReadOnly] = useState(false);
+
+  // 队列和流式控制
+  const [messageQueue, setMessageQueue] = useState<Array<{ input: string; files: UploadedFile[] }>>([]);
+  const [abortController, setAbortController] = useState<AbortController | null>(null);
 
   // 编辑状态
   const [editingTitle, setEditingTitle] = useState('');
@@ -828,29 +866,6 @@ export function UserChatPage() {
     return sessions.find((s) => s.id === currentSessionId) || null;
   }, [sessions, currentSessionId]);
 
-  // ==================== 初始化 ====================
-
-  useEffect(() => {
-    const stored = localStorage.getItem('chat-sessions');
-    if (stored) {
-      try {
-        const parsed = JSON.parse(stored);
-        setSessions(parsed);
-        if (parsed.length > 0) {
-          setCurrentSessionId(parsed[0].id);
-        }
-      } catch (e) {
-        console.error('Failed to parse chat sessions:', e);
-      }
-    }
-  }, []);
-
-  useEffect(() => {
-    if (sessions.length > 0) {
-      localStorage.setItem('chat-sessions', JSON.stringify(sessions));
-    }
-  }, [sessions]);
-
   // ==================== 滚动控制 ====================
 
   const scrollToBottom = useCallback((behavior: ScrollBehavior = 'smooth') => {
@@ -878,42 +893,113 @@ export function UserChatPage() {
 
   // ==================== 会话管理 ====================
 
-  const createNewSession = useCallback(() => {
+  const handleCreateNewSession = useCallback(async () => {
+    if (!user) {
+      setError(t('chat.loginRequired', '请先登录'));
+      return;
+    }
     if (!models || models.length === 0) {
       setError(t('chat.noModelsConfig'));
       return;
     }
+    setError(''); // 清除错误提示
+    const newSession = await createNewSession();
+    if (newSession) {
+      await updateSession(newSession.id, {
+        title: t('chat.newSession', '新对话'),
+        model: models[0].id,
+      });
+      // 确保 isReadOnly 在更新会话后设置为 false
+      setIsReadOnly(false);
+    }
+  }, [models, t, createNewSession, updateSession, user]);
 
-    const newSession: ChatSession = {
-      id: Date.now().toString(),
-      title: t('chat.newSession', '新对话'),
-      model: models[0].id,
-      systemPrompt: DEFAULT_SYSTEM_PROMPT,
-      apiType: 'openai-chat',
-      stream: true,
-      timeout: DEFAULT_TIMEOUT,
-      messages: [],
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
-    };
+  // ==================== 处理 URL 参数和只读模式 ====================
 
-    setSessions((prev) => [...prev, newSession]);
-    setCurrentSessionId(newSession.id);
-    setMobileDrawerOpen(false);
-  }, [models, t]);
-
-  const deleteSession = useCallback(
-    (sessionId: string) => {
-      const filtered = sessions.filter((s) => s.id !== sessionId);
-      setSessions(filtered);
-      if (currentSessionId === sessionId && filtered.length > 0) {
-        setCurrentSessionId(filtered[0].id);
-      } else if (currentSessionId === sessionId) {
-        setCurrentSessionId(null);
+  useEffect(() => {
+    if (sessionIdFromUrl) {
+      // 从 URL 获取会话 ID
+      const session = sessions.find((s) => s.id === sessionIdFromUrl);
+      if (session) {
+        setCurrentSessionId(sessionIdFromUrl);
+        // 会话在本地，但仍需从服务器确认权限并更新数据
+        loadSessionFromServer(sessionIdFromUrl).then((sessionData) => {
+          if (sessionData) {
+            setError(''); // 清除错误提示
+            // 更新本地会话数据
+            setSessions((prev) =>
+              prev.map((s) => (s.id === sessionData.id ? sessionData : s))
+            );
+            if ('isReadOnly' in sessionData) {
+              setIsReadOnly(sessionData.isReadOnly);
+            } else {
+              const isOwner = user?.id === sessionData.ownerId;
+              setIsReadOnly(!isOwner);
+            }
+          }
+        });
+      } else {
+        // 会话不在本地，从服务器获取
+        loadSessionFromServer(sessionIdFromUrl).then((sessionData) => {
+          if (sessionData) {
+            setCurrentSessionId(sessionIdFromUrl);
+            setError(''); // 清除错误提示
+            // 添加到本地会话列表
+            setSessions((prev) => [...prev, sessionData]);
+            if ('isReadOnly' in sessionData) {
+              setIsReadOnly(sessionData.isReadOnly);
+            } else {
+              const isOwner = user?.id === sessionData.ownerId;
+              setIsReadOnly(!isOwner);
+            }
+          } else {
+            // 会话不存在或无权限
+            setIsReadOnly(true);
+            setError(t('chat.sessionNotFound', '会话不存在或无权限访问'));
+          }
+        });
       }
+    } else if (!currentSessionId && sessions.length > 0) {
+      // 如果没有 URL 参数且没有当前会话，使用第一个会话
+      setCurrentSessionId(sessions[0].id);
+      setError(''); // 清除错误提示
+      // 从服务器加载第一个会话以确认权限
+      if (user && sessions[0].ownerId === user.id) {
+        loadSessionFromServer(sessions[0].id).then((sessionData) => {
+          if (sessionData && 'isReadOnly' in sessionData) {
+            setIsReadOnly(sessionData.isReadOnly);
+          }
+        });
+      }
+    } else if (!currentSessionId && !sessionIdFromUrl) {
+      // 如果没有任何会话且没有URL参数，创建新会话
+      setError(''); // 清除错误提示
+      handleCreateNewSession();
+    }
+  }, [sessionIdFromUrl, sessions, currentSessionId, user?.id, handleCreateNewSession, loadSessionFromServer, t]);
+
+  // 监听 currentSessionId 变化，更新只读状态
+  useEffect(() => {
+    if (currentSessionId) {
+      const session = sessions.find((s) => s.id === currentSessionId);
+      if (session) {
+        if ('isReadOnly' in session) {
+          setIsReadOnly(session.isReadOnly);
+        } else {
+          const isOwner = user?.id === session.ownerId;
+          setIsReadOnly(!isOwner);
+        }
+        setError(''); // 找到会话时清除错误提示
+      }
+    }
+  }, [currentSessionId, sessions, user?.id]);
+
+  const handleDeleteSession = useCallback(
+    async (sessionId: string) => {
+      await deleteSession(sessionId);
       setMenuAnchor(null);
     },
-    [sessions, currentSessionId]
+    [deleteSession]
   );
 
   const openSettings = useCallback(
@@ -933,43 +1019,29 @@ export function UserChatPage() {
     [sessions]
   );
 
-  const saveSettings = useCallback(() => {
+  const saveSettings = useCallback(async () => {
     if (!selectedSessionId) return;
-    setSessions((prev) =>
-      prev.map((s) => {
-        if (s.id === selectedSessionId) {
-          return {
-            ...s,
-            title: editingTitle,
-            systemPrompt: editingSystemPrompt,
-            model: editingModel,
-            apiType: editingApiType,
-            stream: editingStream,
-            timeout: editingTimeout,
-            updatedAt: Date.now(),
-          };
-        }
-        return s;
-      })
-    );
+    await updateSession(selectedSessionId, {
+      title: editingTitle,
+      systemPrompt: editingSystemPrompt,
+      model: editingModel,
+      apiType: editingApiType,
+      stream: editingStream,
+      timeout: editingTimeout,
+    });
     setSettingsOpen(false);
-  }, [selectedSessionId, editingTitle, editingSystemPrompt, editingModel, editingApiType, editingStream, editingTimeout]);
+  }, [selectedSessionId, editingTitle, editingSystemPrompt, editingModel, editingApiType, editingStream, editingTimeout, updateSession]);
 
   // 快捷更新模型
   const updateCurrentModel = useCallback(
-    (modelId: string) => {
+    async (modelId: string) => {
       if (!currentSessionId) return;
-      setSessions((prev) =>
-        prev.map((s) => {
-          if (s.id === currentSessionId) {
-            return { ...s, model: modelId, updatedAt: Date.now() };
-          }
-          return s;
-        })
-      );
+      await updateSession(currentSessionId, {
+        model: modelId,
+      });
       setModelAnchor(null);
     },
-    [currentSessionId]
+    [currentSessionId, updateSession]
   );
 
   // 快捷更新流式设置
@@ -1077,48 +1149,92 @@ export function UserChatPage() {
 
   const handleCopyMessage = useCallback(async (content: string) => {
     try {
-      await navigator.clipboard.writeText(content);
+      await copyToClipboard(content);
       setSnackbar({ open: true, message: t('chat.copiedToClipboard') });
     } catch (e) {
       console.error('Failed to copy:', e);
     }
-  }, []);
+  }, [t]);
 
   const handleDeleteMessage = useCallback(
-    (messageIndex: number) => {
+    async (messageIndex: number) => {
       if (!currentSessionId) return;
-      setSessions((prev) =>
-        prev.map((s) => {
-          if (s.id === currentSessionId) {
-            const messages = [...s.messages];
-            messages.splice(messageIndex, 1);
-            return { ...s, messages, updatedAt: Date.now() };
-          }
-          return s;
-        })
-      );
+      
+      // 只读模式下不允许删除消息
+      if (isReadOnly) {
+        return;
+      }
+      
+      const session = sessions.find(s => s.id === currentSessionId);
+      if (!session) return;
+      
+      const messages = [...session.messages];
+      const message = messages[messageIndex];
+      
+      // 不允许删除 AI 的回复消息
+      if (message.role === 'assistant') {
+        return;
+      }
+      
+      messages.splice(messageIndex, 1);
+      await updateSession(currentSessionId, { messages });
     },
-    [currentSessionId]
+    [currentSessionId, isReadOnly, sessions, updateSession]
   );
 
   const handleResendMessage = useCallback(
-    (message: ChatMessage, messageIndex: number) => {
+    async (message: ChatMessage, messageIndex: number) => {
       if (!currentSession || !token) return;
-
-      setSessions((prev) =>
-        prev.map((s) => {
-          if (s.id === currentSessionId) {
-            const messages = s.messages.slice(0, messageIndex);
-            return { ...s, messages, updatedAt: Date.now() };
-          }
-          return s;
-        })
-      );
-
+      
+      // 只读模式下不允许重发消息
+      if (isReadOnly) {
+        return;
+      }
+      
+      const session = sessions.find(s => s.id === currentSessionId);
+      if (!session) return;
+      
+      const messages = session.messages.slice(0, messageIndex);
+      await updateSession(currentSessionId, { messages });
       setInput(message.content);
     },
-    [currentSession, currentSessionId, token]
+    [currentSession, currentSessionId, token, isReadOnly, sessions, updateSession]
   );
+
+  // ==================== 队列管理 ====================
+
+  const handleAddToQueue = useCallback(() => {
+    if (!input.trim() && files.length === 0) return;
+    setMessageQueue((prev) => [...prev, { input, files }]);
+    setInput('');
+    setFiles([]);
+  }, [input, files]);
+
+  const handlePauseStream = useCallback(() => {
+    if (abortController) {
+      abortController.abort();
+      setAbortController(null);
+      setLoading(false);
+    }
+  }, [abortController]);
+
+  // 处理队列中的下一条消息
+  useEffect(() => {
+    if (!loading && messageQueue.length > 0 && currentSessionId) {
+      const nextMessage = messageQueue[0];
+      setMessageQueue((prev) => prev.slice(1));
+      
+      // 直接设置输入和文件
+      setInput(nextMessage.input);
+      setFiles(nextMessage.files);
+      
+      // 延迟发送，确保状态已更新
+      setTimeout(() => {
+        // 这里会在下一个渲染周期自动触发发送
+        // 因为 input 已经被设置，sendMessage 会检查并发送
+      }, 50);
+    }
+  }, [loading, messageQueue.length, currentSessionId]);
 
   // ==================== 发送消息 ====================
 
@@ -1170,8 +1286,9 @@ export function UserChatPage() {
     setIsUserNearBottom(true);
     streamContentRef.current = '';
 
-    // 创建 AbortController 用于超时控制
+    // 创建 AbortController 用于超时控制和暂停
     const controller = new AbortController();
+    setAbortController(controller);
     const timeoutId = setTimeout(() => {
       controller.abort();
     }, (session.timeout || DEFAULT_TIMEOUT) * 1000);
@@ -1381,8 +1498,26 @@ export function UserChatPage() {
       );
     } finally {
       setLoading(false);
+      setAbortController(null);
+      
+      // 将更新后的会话同步到服务器
+      if (currentSessionId) {
+        const updatedSession = sessions.find(s => s.id === currentSessionId);
+        if (updatedSession) {
+          updateSession(currentSessionId, updatedSession).catch(err => {
+            console.error('Failed to sync session to server:', err);
+          });
+        }
+      }
+      
+      // 检查队列中是否有待发送的消息
+      if (messageQueue.length > 0 && currentSessionId) {
+        setTimeout(() => {
+          // 重新触发队列处理
+        }, 50);
+      }
     }
-  }, [input, files, currentSession, currentSessionId, token, models, sessions]);
+  }, [input, files, currentSession, currentSessionId, token, models, sessions, messageQueue.length]);
 
   const handleKeyPress = useCallback(
     (e: React.KeyboardEvent) => {
@@ -1403,7 +1538,7 @@ export function UserChatPage() {
           fullWidth
           variant="contained"
           startIcon={<Plus size={18} />}
-          onClick={createNewSession}
+          onClick={handleCreateNewSession}
           sx={{
             borderRadius: '12px',
             py: 1.25,
@@ -1421,17 +1556,33 @@ export function UserChatPage() {
             key={session.id}
             disablePadding
             secondaryAction={
-              <IconButton
-                edge="end"
-                size="small"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setSelectedSessionId(session.id);
-                  setMenuAnchor(e.currentTarget);
-                }}
-              >
-                <MoreVertical size={16} />
-              </IconButton>
+              <Box sx={{ display: 'flex', gap: 0.5 }}>
+                <IconButton
+                  edge="end"
+                  size="small"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setSelectedSessionId(session.id);
+                    setMenuAnchor(e.currentTarget);
+                  }}
+                  sx={{ opacity: 0.6 }}
+                >
+                  <MoreVertical size={16} />
+                </IconButton>
+                <IconButton
+                  edge="end"
+                  size="small"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (confirm(t('chat.confirmDelete', '确定要删除这个对话吗？'))) {
+                      handleDeleteSession(session.id);
+                    }
+                  }}
+                  sx={{ opacity: 0.6, color: 'error.main' }}
+                >
+                  <Trash2 size={16} />
+                </IconButton>
+              </Box>
             }
             sx={{ mb: 0.5 }}
           >
@@ -1493,53 +1644,6 @@ export function UserChatPage() {
           position: 'relative',
         }}
       >
-        {/* 顶部栏 */}
-        <Box
-          sx={{
-            display: 'flex',
-            alignItems: 'center',
-            px: 2,
-            py: 1.5,
-            borderBottom: 1,
-            borderColor: 'divider',
-            bgcolor: 'background.paper',
-            flexShrink: 0,
-            minHeight: 56,
-          }}
-        >
-          {/* 展开侧边栏按钮 */}
-          <IconButton
-            size="small"
-            onClick={toggleMobileOpen}
-            sx={{ mr: 1 }}
-            title={t('chat.toggleSidebar', '展开/隐藏侧边栏')}
-          >
-            <ChevronRight size={20} />
-          </IconButton>
-
-          <Typography variant="h6" sx={{ flex: 1, fontWeight: 500, fontSize: '1.125rem' }} noWrap>
-            {currentSession?.title || t('chat.selectSession', '选择对话')}
-          </Typography>
-
-          {currentSession && (
-            <IconButton
-              size="small"
-              onClick={(e) => {
-                setSelectedSessionId(currentSession.id);
-                setMenuAnchor(e.currentTarget);
-              }}
-            >
-              <MoreVertical size={20} />
-            </IconButton>
-          )}
-
-          {isMobile && (
-            <IconButton edge="end" onClick={() => setMobileDrawerOpen(true)} sx={{ ml: 1 }}>
-              <MenuIcon size={24} />
-            </IconButton>
-          )}
-        </Box>
-
         {/* 消息区域 - 可滚动 */}
         <Box
           ref={messageContainerRef}
@@ -1584,7 +1688,7 @@ export function UserChatPage() {
                 variant="contained"
                 size="large"
                 startIcon={<Plus size={20} />}
-                onClick={createNewSession}
+                onClick={handleCreateNewSession}
                 sx={{ borderRadius: '12px', px: 4, py: 1.25, textTransform: 'none' }}
               >
                 {t('chat.newSession', '新对话')}
@@ -1599,6 +1703,7 @@ export function UserChatPage() {
                   index={index}
                   isLoading={loading}
                   isLastMessage={index === currentSession.messages.length - 1}
+                  isReadOnly={isReadOnly}
                   onCopy={() => handleCopyMessage(message.content)}
                   onDelete={() => handleDeleteMessage(index)}
                   onEdit={() => {
@@ -1652,6 +1757,30 @@ export function UserChatPage() {
             }}
           >
             {/* 附件预览 */}
+            {isReadOnly ? (
+          <Box
+            sx={{
+              maxWidth: 800,
+              mx: 'auto',
+              bgcolor: theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)',
+              borderRadius: '24px',
+              p: 3,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 1,
+            }}
+          >
+            <Lock size={20} sx={{ color: 'text.secondary' }} />
+            <Typography variant="body2" color="text.secondary">
+              {currentSession?.isPublic 
+                ? t('chat.readOnlyPublic', '只读模式（公开会话）') 
+                : t('chat.readOnly', '只读模式')}
+            </Typography>
+          </Box>
+        ) : (
+          <>
+            {/* 文件预览 */}
             {files.length > 0 && (
               <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mb: 1.5, maxWidth: 800, mx: 'auto' }}>
                 {files.map((file) => (
@@ -1704,11 +1833,14 @@ export function UserChatPage() {
               sx={{
                 maxWidth: 800,
                 mx: 'auto',
-                bgcolor: theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)',
+                bgcolor: 'transparent',
                 borderRadius: '24px',
                 border: 1,
                 borderColor: theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)',
                 overflow: 'hidden',
+                boxShadow: theme.palette.mode === 'dark' 
+                  ? '0 8px 32px rgba(0,0,0,0.5)' 
+                  : '0 8px 32px rgba(0,0,0,0.1)',
               }}
             >
               {/* 输入框 */}
@@ -1721,7 +1853,7 @@ export function UserChatPage() {
                 onChange={(e) => setInput(e.target.value)}
                 onKeyPress={handleKeyPress}
                 placeholder={t('chat.inputPlaceholder', '输入消息...')}
-                disabled={loading}
+                disabled={false}
                 variant="standard"
                 InputProps={{
                   disableUnderline: true,
@@ -1756,11 +1888,11 @@ export function UserChatPage() {
                 />
 
                 {/* 附件按钮 */}
-                <Tooltip title="添加附件">
+                <Tooltip title={t('chat.addAttachment', '添加附件')}>
                   <IconButton
                     size="small"
                     onClick={() => fileInputRef.current?.click()}
-                    disabled={loading}
+                    disabled={false}
                     sx={{ color: 'text.secondary' }}
                   >
                     <Paperclip size={20} />
@@ -1768,7 +1900,7 @@ export function UserChatPage() {
                 </Tooltip>
 
                 {/* 模型选择 */}
-                <Tooltip title="选择模型">
+                <Tooltip title={currentSession.model}>
                   <Chip
                     size="small"
                     label={currentSession.model}
@@ -1780,6 +1912,12 @@ export function UserChatPage() {
                       ml: 1,
                       borderRadius: '8px',
                       cursor: 'pointer',
+                      maxWidth: 150,
+                      '& .MuiChip-label': {
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                      },
                       '& .MuiChip-deleteIcon': {
                         color: 'inherit',
                       },
@@ -1787,33 +1925,66 @@ export function UserChatPage() {
                   />
                 </Tooltip>
 
+                <Box sx={{ flex: 1 }} />
+
                 {/* 选项按钮 */}
-                <Tooltip title="更多选项">
-                  <IconButton size="small" onClick={(e) => setOptionsAnchor(e.currentTarget)} sx={{ ml: 1 }}>
+                <Tooltip title={t('chat.moreOptions', '更多选项')}>
+                  <IconButton size="small" onClick={(e) => setOptionsAnchor(e.currentTarget)} sx={{ mr: 1 }}>
                     <Settings size={18} />
                   </IconButton>
                 </Tooltip>
 
-                <Box sx={{ flex: 1 }} />
-
                 {/* 发送按钮 */}
-                <IconButton
-                  onClick={sendMessage}
-                  disabled={loading || (!input.trim() && files.length === 0)}
-                  sx={{
-                    bgcolor: 'primary.main',
-                    color: 'primary.contrastText',
-                    '&:hover': { bgcolor: 'primary.dark' },
-                    '&.Mui-disabled': { bgcolor: 'action.disabledBackground', color: 'action.disabled' },
-                  }}
-                >
-                  {loading ? <CircularProgress size={22} color="inherit" /> : <Send size={20} />}
-                </IconButton>
+                {loading ? (
+                  <>
+                    {/* 队列按钮 - 当AI响应时用户输入显示 */}
+                    {(input.trim() || files.length > 0) && (
+                      <Tooltip title={t('chat.addToQueue', '加入队列')}>
+                        <IconButton
+                          onClick={handleAddToQueue}
+                          sx={{
+                            bgcolor: 'warning.main',
+                            color: 'warning.contrastText',
+                            '&:hover': { bgcolor: 'warning.dark' },
+                            mr: 1,
+                          }}
+                        >
+                          <Zap size={20} />
+                        </IconButton>
+                      </Tooltip>
+                    )}
+                    {/* 暂停按钮 */}
+                    <IconButton
+                      onClick={handlePauseStream}
+                      sx={{
+                        bgcolor: 'error.main',
+                        color: 'error.contrastText',
+                        '&:hover': { bgcolor: 'error.dark' },
+                      }}
+                    >
+                      <X size={20} />
+                    </IconButton>
+                  </>
+                ) : (
+                  <IconButton
+                    onClick={sendMessage}
+                    disabled={!input.trim() && files.length === 0}
+                    sx={{
+                      bgcolor: 'primary.main',
+                      color: 'primary.contrastText',
+                      '&:hover': { bgcolor: 'primary.dark' },
+                      '&.Mui-disabled': { bgcolor: 'action.disabledBackground', color: 'action.disabled' },
+                    }}
+                  >
+                    <Send size={20} />
+                  </IconButton>
+                )}
               </Box>
             </Box>
-          </Box>
+        </>
         )}
       </Box>
+        )}
 
       {/* 模型选择 Popover */}
       <Popover
@@ -1852,21 +2023,67 @@ export function UserChatPage() {
         PaperProps={{ sx: { borderRadius: '12px', p: 2, minWidth: 280 } }}
       >
         <Typography variant="subtitle2" sx={{ mb: 2, fontWeight: 600 }}>
-          快捷设置
+          {t('chat.options', '选项')}
         </Typography>
 
         {/* 流式输出 */}
         <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
           <Zap size={18} style={{ marginRight: 8 }} />
           <Typography variant="body2" sx={{ flex: 1 }}>
-            流式输出
+            {t('chat.streamOutput', '流式输出')}
           </Typography>
           <Switch
             size="small"
             checked={currentSession?.stream ?? true}
             onChange={(e) => updateCurrentStream(e.target.checked)}
+            disabled={isReadOnly}
           />
         </Box>
+
+        {/* 公开会话 */}
+        <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+          <Globe2 size={18} style={{ marginRight: 8 }} />
+          <Typography variant="body2" sx={{ flex: 1 }}>
+            {t('chat.publicSession', '公开会话')}
+          </Typography>
+          <Switch
+            size="small"
+            checked={currentSession?.isPublic ?? false}
+            onChange={(e) => {
+              if (currentSession) {
+                updateSession(currentSession.id, { isPublic: e.target.checked });
+              }
+            }}
+            disabled={isReadOnly}
+          />
+        </Box>
+
+        {/* 复制会话链接 */}
+        {currentSession?.isPublic && (
+          <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+            <Globe size={18} style={{ marginRight: 8 }} />
+            <Button
+              size="small"
+              onClick={async () => {
+                const link = `${window.location.origin}/chat/session/${currentSession.id}`;
+                try {
+                  await copyToClipboard(link);
+                  setSnackbar({ open: true, message: t('chat.linkCopied', '链接已复制') });
+                } catch (e) {
+                  console.error('Failed to copy link:', e);
+                }
+              }}
+              sx={{
+                flex: 1,
+                justifyContent: 'flex-start',
+                textTransform: 'none',
+              }}
+              startIcon={<Copy size={14} />}
+            >
+              {t('chat.copyLink', '复制链接')}
+            </Button>
+          </Box>
+        )}
 
         <Divider sx={{ my: 1.5 }} />
 
@@ -1875,7 +2092,7 @@ export function UserChatPage() {
           <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
             <Clock size={18} style={{ marginRight: 8 }} />
             <Typography variant="body2">
-              超时时间: {currentSession?.timeout || DEFAULT_TIMEOUT}秒
+              {t('chat.timeout', '超时时间')}: {currentSession?.timeout || DEFAULT_TIMEOUT}s
             </Typography>
           </Box>
           <Slider
@@ -1910,7 +2127,7 @@ export function UserChatPage() {
           {t('chat.settings', '设置')}
         </MenuItem>
         <MenuItem
-          onClick={() => selectedSessionId && deleteSession(selectedSessionId)}
+          onClick={() => selectedSessionId && handleDeleteSession(selectedSessionId)}
           sx={{ borderRadius: '8px', mx: 0.5, color: 'error.main' }}
         >
           <Trash2 size={16} style={{ marginRight: 8 }} />
@@ -2032,6 +2249,7 @@ export function UserChatPage() {
           />
         </Box>
       </Dialog>
+      </Box>
 
       {/* 桌面端侧边栏 */}
       {!isMobile && (

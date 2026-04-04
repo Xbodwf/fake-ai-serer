@@ -17,14 +17,30 @@ export default defineConfig({
   server: {
     host: "0.0.0.0",
     port: 5173,
+    strictPort: false,
+    cors: true,
+    allowedHosts: 'all',
     // 将所有非前端请求代理到后端
     proxy: {
-      '/api': `http://localhost:${backendPort}`,
-      '/v1': `http://localhost:${backendPort}`,
-      '/v1beta': `http://localhost:${backendPort}`,
+      '/api': {
+        target: `http://localhost:${backendPort}`,
+        changeOrigin: true,
+        secure: false,
+      },
+      '/v1': {
+        target: `http://localhost:${backendPort}`,
+        changeOrigin: true,
+        secure: false,
+      },
+      '/v1beta': {
+        target: `http://localhost:${backendPort}`,
+        changeOrigin: true,
+        secure: false,
+      },
       '/ws': {
         target: `ws://localhost:${backendPort}`,
         ws: true,
+        changeOrigin: true,
       },
     },
   },

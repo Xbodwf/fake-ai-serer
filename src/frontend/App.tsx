@@ -1,12 +1,14 @@
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import { ThemeProvider, CssBaseline, Box } from '@mui/material';
+import { useState, useEffect } from 'react';
+import { ThemeProvider, CssBaseline, Box, Typography } from '@mui/material';
 import type { Theme } from '@mui/material';
 import { createTheme } from '@mui/material/styles';
+import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { ServerProvider } from './contexts/ServerContext';
 import { useServer } from './contexts/ServerContext';
 import { AuthProvider } from './contexts/AuthContext';
 import { ThemeProvider as CustomThemeProvider, useTheme } from './contexts/ThemeContext';
 import { SidebarProvider } from './contexts/SidebarContext';
+import { ChatProvider, useChat } from './contexts/ChatContext';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { UserLayout } from './components/UserLayout';
 import { AdminLayout } from './components/AdminLayout';
@@ -36,6 +38,72 @@ import { ModelMarketplace } from './pages/ModelMarketplace';
 import ModelManager from './components/ModelManager';
 import { NotFoundPage } from './pages/NotFoundPage';
 import { DocsPage } from './pages/DocsPage';
+
+// 创建新会话并重定向的组件
+function ChatRedirect() {
+  const { createNewSession, sessions, currentSessionId, sessionsLoading } = useChat();
+  const navigate = useNavigate();
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const initSession = async () => {
+      try {
+        // 如果会话正在加载，等待加载完成
+        if (sessionsLoading) {
+          return;
+        }
+
+        // 如果有当前会话，直接跳转
+        if (currentSessionId) {
+          navigate(`/chat/session/${currentSessionId}`, { replace: true });
+          setLoading(false);
+          return;
+        }
+
+        // 如果有会话列表，跳转到第一个会话
+        if (sessions.length > 0) {
+          navigate(`/chat/session/${sessions[0].id}`, { replace: true });
+          setLoading(false);
+          return;
+        }
+
+        // 否则创建新会话并跳转
+        const newSession = await createNewSession();
+        if (newSession) {
+          navigate(`/chat/session/${newSession.id}`, { replace: true });
+          setLoading(false);
+        } else {
+          setError('Failed to create session');
+        }
+      } catch (err) {
+        console.error('Failed to initialize session:', err);
+        setError('Failed to initialize session');
+      }
+    };
+
+    initSession();
+  }, [currentSessionId, sessions.length, sessionsLoading, createNewSession, navigate]);
+
+  // 如果会话正在加载，显示加载状态
+  if (loading) {
+    return (
+      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
+        <Typography>加载中...</Typography>
+      </Box>
+    );
+  }
+
+  if (error) {
+    return (
+      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
+        <Typography color="error">{error}</Typography>
+      </Box>
+    );
+  }
+
+  return null;
+}
 
 // 模型广场包装器 - 从 ServerContext 获取 models
 function ModelMarketplaceWrapper() {
@@ -169,6 +237,7 @@ function AppContent() {
       <CssBaseline />
       <AuthProvider>
         <SidebarProvider>
+        <ChatProvider>
         <ServerProvider>
           <Box sx={{ 
             width: '100vw', 
@@ -278,9 +347,17 @@ function AppContent() {
               element={
                 <ProtectedRoute>
                   <UserLayout>
-                    <UserChatPage />
+                    <ChatRedirect />
                   </UserLayout>
                 </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/chat/session/:id"
+              element={
+                <UserLayout>
+                  <UserChatPage />
+                </UserLayout>
               }
             />
             <Route
@@ -415,6 +492,7 @@ function AppContent() {
           </Routes>
           </Box>
         </ServerProvider>
+        </ChatProvider>
         </SidebarProvider>
       </AuthProvider>
     </ThemeProvider>
