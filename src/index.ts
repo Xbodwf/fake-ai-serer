@@ -119,14 +119,98 @@ async function initializeApp() {
     app.use('/api/payment', paymentRouter);
     app.use('/api/admin', authMiddleware, adminMiddleware, createAdminPaymentRoutes(redeemCodeManager));
 
-    // SPA fallback - 在所有路由挂载后再挂载
+    // ==================== SSR 支持 ====================
+// 如果存在SSR构建产物，则启用服务端渲染
+const serverEntryPath = join(process.cwd(), 'dist/server/server.js');
+const ssrEnabled = existsSync(serverEntryPath);
+
+if (ssrEnabled) {
+  console.log('[Server] SSR enabled, loading server entry...');
+  
+  try {
+    // 动态导入SSR模块
+    const { render } = await import(serverEntryPath);
+    const { loadTemplate, renderTemplate } = await import('./server-ssr.js');
+    const template = loadTemplate();
+
+    // SSR中间件
+    app.use(async (req: Request, res: Response, next: NextFunction) => {
+      // 跳过API请求和静态资源
+      if (req.path.startsWith('/api/') || 
+          req.path.startsWith('/v1/') || 
+          req.path.startsWith('/v1beta/') ||
+          req.path.startsWith('/static/') ||
+          req.path.includes('.')) {
+        return next();
+      }
+
+      try {
+        const context: { url?: string; title?: string } = {};
+        const initialState: any = {};
+
+        // 预加载聊天会话数据
+        const sessionMatch = req.path.match(/\/chat\/session\/([^\/]+)/);
+        if (sessionMatch) {
+          const sessionId = sessionMatch[1];
+          try {
+            const { getChatSessionById } = await import('./db/chatSessions.js');
+            const session = await getChatSessionById(sessionId);
+            if (session) {
+              initialState.session = session;
+              // 设置页面标题
+              if (session.title) {
+                context.title = `${session.title} - Phantom Mock`;
+              }
+            }
+          } catch (error) {
+            console.error('[SSR] Failed to preload session:', error);
+          }
+        }
+
+        const appHtml = render({ url: req.path, context });
+        
+        // 检查是否有重定向
+        if (context.url) {
+          return res.redirect(context.url);
+        }
+
+        // 渲染完整HTML
+        let html = renderTemplate(template, initialState).replace('<!--app-html-->', appHtml);
+        
+        // 如果有自定义标题，替换它
+        if (context.title) {
+          html = html.replace(/<title>.*?<\/title>/, `<title>${context.title}</title>`);
+        }
+
+        res.send(html);
+      } catch (error) {
+        console.error('[SSR] Error rendering:', error);
+        // 出错时回退到静态文件
+        next();
+      }
+    });
+
+    console.log('[Server] SSR middleware loaded');
+  } catch (error) {
+    console.error('[Server] Failed to load SSR:', error);
+  }
+}
+
+// SPA fallback - 在所有路由挂载后再挂载
     app.use((req: Request, res: Response) => {
       // 如果是 API 请求但未匹配到路由，返回 404
       if (req.path.startsWith('/api/') || req.path.startsWith('/v1/') || req.path.startsWith('/v1beta/')) {
         return res.status(404).json({ error: 'Not found' });
       }
-      // 否则返回前端页面（如果存在）
-      const indexPath = join(distPath, 'index.html');
+      
+      // 优先使用SSR构建的index.html
+      let indexPath: string;
+      if (existsSync(clientDistPath)) {
+        indexPath = join(clientDistPath, 'index.html');
+      } else {
+        indexPath = join(frontendDistPath, 'index.html');
+      }
+      
       if (existsSync(indexPath)) {
         res.sendFile(indexPath, { root: '/' });
       } else {
@@ -366,10 +450,16 @@ if (existsSync(staticPath)) {
 }
 
 // 静态文件服务（前端构建产物）
-// 仅在生产模式下提供静态文件
-const distPath = join(process.cwd(), 'dist/frontend');
-if (existsSync(distPath)) {
-  app.use(express.static(distPath));
+// 优先使用SSR构建产物，如果不存在则使用传统构建产物
+const clientDistPath = join(process.cwd(), 'dist/client');
+const frontendDistPath = join(process.cwd(), 'dist/frontend');
+
+if (existsSync(clientDistPath)) {
+  app.use(express.static(clientDistPath));
+  console.log('[Server] Serving static files from dist/client (SSR build)');
+} else if (existsSync(frontendDistPath)) {
+  app.use(express.static(frontendDistPath));
+  console.log('[Server] Serving static files from dist/frontend (traditional build)');
 }
 
 // ==================== 启动服务 ====================
