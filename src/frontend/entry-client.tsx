@@ -1,5 +1,6 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
+import { BrowserRouter } from 'react-router-dom'
 import App from './App'
 import './i18n'
 import './styles/markdown.css'
@@ -16,6 +17,8 @@ import '@fontsource/noto-sans-sc/700.css'
 ReactDOM.hydrateRoot(
   document.getElementById('root')!,
   <React.StrictMode>
-    <App />
+    <BrowserRouter>
+      <App />
+    </BrowserRouter>
   </React.StrictMode>
 )
