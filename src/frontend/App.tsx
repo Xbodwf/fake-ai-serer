@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { ThemeProvider, CssBaseline, Box, Typography } from '@mui/material';
 import type { Theme } from '@mui/material';
 import { createTheme } from '@mui/material/styles';
-import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
+import { Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { ServerProvider } from './contexts/ServerContext';
 import { useServer } from './contexts/ServerContext';
 import { AuthProvider } from './contexts/AuthContext';
@@ -501,11 +501,9 @@ function AppContent() {
 
 function App() {
   return (
-    <Router>
-      <CustomThemeProvider>
-        <AppContent />
-      </CustomThemeProvider>
-    </Router>
+    <CustomThemeProvider>
+      <AppContent />
+    </CustomThemeProvider>
   );
 }
 
