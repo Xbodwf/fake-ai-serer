@@ -21,15 +21,21 @@ export default memo(function RequestList() {
   // 获取允许人工回复的模型ID集合
   const manualReplyModelIds = useMemo(() => {
     const ids = new Set<string>();
-    models.forEach(model => {
-      if (model.allowManualReply !== false) {
-        ids.add(model.id);
-      }
-    });
+    if (models && Array.isArray(models)) {
+      models.forEach(model => {
+        if (model.allowManualReply !== false) {
+          ids.add(model.id);
+        }
+      });
+    }
     return ids;
   }, [models]);
 
   const requests = useMemo(() => {
+    if (!pendingRequests || !(pendingRequests instanceof Map)) {
+      return [];
+    }
+    
     const allRequests = Array.from(pendingRequests.entries());
     const filteredRequests = allRequests.filter(([, request]) => manualReplyModelIds.has(request.request.model));
     
