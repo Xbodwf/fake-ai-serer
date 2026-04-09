@@ -21,7 +21,7 @@ export function LanguageSwitcher() {
   };
 
   // 检查语言代码，支持 'zh', 'zh-CN', 'zh-Hans' 等变体
-  const isZh = i18n.language.startsWith('zh');
+  const isZh = i18n.language?.startsWith('zh') ?? false;
   const currentLang = isZh ? '中文' : 'English';
 
   return (
