@@ -68,13 +68,17 @@ router.post('/', async (req: Request, res: Response) => {
  request: { 
  model: modelId, 
  messages: [],
- input: req.body.input, // 包含输入数据
  },
  isStream: false,
  createdAt: Date.now(),
  resolve: () => {},
  requestType: 'embedding' as any,
  requestParams: req.body, // 包含完整的请求参数
+ embeddingRequest: {
+ model: modelId,
+ input: req.body.input,
+ encoding_format: req.body.encoding_format,
+ },
  };
 
  const responsePromise = new Promise<string>((resolve) => {

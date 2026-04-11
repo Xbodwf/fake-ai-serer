@@ -357,7 +357,7 @@ export async function forwardEmbeddingsRequest(
         const url = `${baseUrl}/v1beta/models/${forwardModel}:batchEmbedContents`;
         console.log(`[Forwarder] Embeddings 转发 URL (batchEmbedContents): ${url}`);
         
-        const requests = inputs.map(input => ({
+        const requests = inputs.map((input: string | any) => ({
           content: {
             parts: [{ text: typeof input === 'string' ? input : JSON.stringify(input) }],
           },

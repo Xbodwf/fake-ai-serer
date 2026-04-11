@@ -593,9 +593,14 @@ export interface WSMessage {
       n?: number;
       user?: string;
     };
-    requestType?: 'chat' | 'image' | 'video';
+    requestType?: 'chat' | 'image' | 'video' | 'embedding';
     imageRequest?: ImageGenerationRequest;
     videoRequest?: VideoGenerationRequest;
+    embeddingRequest?: {
+      model: string;
+      input: string | string[];
+      encoding_format?: 'float' | 'base64';
+    };
     // 完整的 HTTP 请求信息（用于节点转发）
     httpRequest?: {
       method: string;
