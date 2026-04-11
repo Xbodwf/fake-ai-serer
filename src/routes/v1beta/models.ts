@@ -83,10 +83,10 @@ function isModelSupportedByEndpoint(model: Model | null, endpoint: string): bool
 }
 
 // 辅助函数：从 Gemini 路径解析模型 ID 和操作类型
-// Gemini API 路径格式: /v1beta/models/{modelId}:generateContent 或 :streamGenerateContent 或 :embedContent
+// Gemini API 路径格式: /v1beta/models/{modelId}:generateContent 或 :streamGenerateContent 或 :embedContent 或 :batchEmbedContents
 function parseGeminiModelPath(path: string): { modelId: string; action: string } | null {
   // 匹配 /v1beta/models/{modelId}:{action}
-  const match = path.match(/\/v1beta\/models\/(.+):(generateContent|streamGenerateContent|embedContent)$/);
+  const match = path.match(/\/v1beta\/models\/(.+):(generateContent|streamGenerateContent|embedContent|batchEmbedContents)$/);
   if (match) {
     return { modelId: decodeURIComponent(match[1]), action: match[2] };
   }
@@ -566,6 +566,79 @@ async function handleGeminiEmbedContent(
   }
 }
 
+async function handleGeminiBatchEmbedContents(
+  req: Request,
+  res: Response,
+  modelId: string
+) {
+  const body = req.body;
+
+  // 验证 API Key
+  const apiKeyStr = extractApiKey(req);
+  let apiKeyObj: any = null;
+
+  if (apiKeyStr) {
+    apiKeyObj = await validateApiKey(apiKeyStr);
+    if (!apiKeyObj) {
+      return res.status(401).json({
+        error: { code: 401, message: 'Invalid or expired API key', status: 'UNAUTHENTICATED' }
+      });
+    }
+  }
+
+  // 验证模型是否存在
+  const model = getModel(modelId);
+  if (!model) {
+    return res.status(404).json({
+      error: { code: 404, message: `Model ${modelId} not found`, status: 'NOT_FOUND' }
+    });
+  }
+
+  // 验证模型类型是否为 embedding
+  if (model.type !== 'embedding') {
+    return res.status(400).json({
+      error: { code: 400, message: `Model ${modelId} is not an embedding model`, status: 'BAD_REQUEST' }
+    });
+  }
+
+  // 提取多个文本内容
+  const requests: { content: { parts: { text?: string }[] } }[] = body.requests || [];
+  
+  if (!requests || requests.length === 0) {
+    return res.status(400).json({
+      error: { code: 400, message: 'No requests provided', status: 'BAD_REQUEST' }
+    });
+  }
+
+  console.log('\n========================================');
+  console.log('收到新的 batchEmbedContents 请求 [Google Gemini]');
+  console.log('模型:', modelId);
+  console.log('批处理数量:', requests.length);
+  console.log('当前前端连接数:', getConnectedClientsCount());
+  console.log('----------------------------------------');
+
+  // 为每个请求生成嵌入向量
+  const embeddings: { embedding: { values: number[] } }[] = [];
+
+  for (const request of requests) {
+    const textContent = request.content?.parts
+      .map((p: { text?: string }) => p.text || '')
+      .filter((t: string) => t)
+      .join('\n') || '';
+
+    embeddings.push({
+      embedding: {
+        values: generateEmbedding(textContent)
+      }
+    });
+  }
+
+  console.log('生成的嵌入向量数量:', embeddings.length);
+  console.log('========================================\n');
+
+  res.json({ embeddings });
+}
+
 // GET /v1beta/models - Gemini models list (包括 Actions)
 router.get('/', (req: Request, res: Response) => {
   const models = getAllModels().map(m => ({
@@ -676,6 +749,11 @@ router.post('/*', async (req: Request, res: Response) => {
   // 处理 embedContent 请求
   if (action === 'embedContent') {
     return handleGeminiEmbedContent(req, res, modelId);
+  }
+
+  // 处理 batchEmbedContents 请求
+  if (action === 'batchEmbedContents') {
+    return handleGeminiBatchEmbedContents(req, res, modelId);
   }
 
   const isStream = action === 'streamGenerateContent';

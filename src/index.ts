@@ -393,54 +393,6 @@ app.use('/api', apiRoutes);
 app.use('/v1', apiKeyAuthMiddleware);
 app.use('/v1', v1Routes);
 
-// ==================== 主流 API 端点别名 ====================
-// DeepSeek API (OpenAI 兼容格式)
-app.use('/deepseek/v1', apiKeyAuthMiddleware);
-app.use('/deepseek/v1', openaiRoutes);
-app.use('/deepseek/chat', apiKeyAuthMiddleware);
-app.use('/deepseek/chat', openaiRoutes);
-
-// Moonshot AI (OpenAI 兼容格式)
-app.use('/moonshot/v1', apiKeyAuthMiddleware);
-app.use('/moonshot/v1', openaiRoutes);
-
-// Zhipu AI / GLM (OpenAI 兼容格式)
-app.use('/zhipu/v1', apiKeyAuthMiddleware);
-app.use('/zhipu/v1', openaiRoutes);
-
-// Qwen / Tongyi (OpenAI 兼容格式)
-app.use('/qwen/v1', apiKeyAuthMiddleware);
-app.use('/qwen/v1', openaiRoutes);
-app.use('/tongyi/v1', apiKeyAuthMiddleware);
-app.use('/tongyi/v1', openaiRoutes);
-
-// Baidu Wenxin (OpenAI 兼容格式)
-app.use('/wenxin/v1', apiKeyAuthMiddleware);
-app.use('/wenxin/v1', openaiRoutes);
-
-// ByteDance / Doubao (OpenAI 兼容格式)
-app.use('/doubao/v1', apiKeyAuthMiddleware);
-app.use('/doubao/v1', openaiRoutes);
-
-// Minimax (OpenAI 兼容格式)
-app.use('/minimax/v1', apiKeyAuthMiddleware);
-app.use('/minimax/v1', openaiRoutes);
-
-// SiliconFlow (OpenAI 兼容格式)
-app.use('/siliconflow/v1', apiKeyAuthMiddleware);
-app.use('/siliconflow/v1', openaiRoutes);
-
-// Groq (OpenAI 兼容格式)
-app.use('/groq/v1', apiKeyAuthMiddleware);
-app.use('/groq/v1', openaiRoutes);
-
-// Together AI (OpenAI 兼容格式)
-app.use('/together/v1', apiKeyAuthMiddleware);
-app.use('/together/v1', openaiRoutes);
-
-// OpenRouter (OpenAI 兼容格式)
-app.use('/openrouter/v1', apiKeyAuthMiddleware);
-app.use('/openrouter/v1', openaiRoutes);
 
 // /v1beta/* 路由应用 API Key 认证中间件 (Google Gemini)
 app.use('/v1beta', apiKeyAuthMiddleware);

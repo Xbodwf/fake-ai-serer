@@ -1,8 +1,10 @@
 import { Router, Request, Response } from 'express';
-import type { Model } from '../../types.js';
-import { getModel, selectProviderKeyRoundRobin, getProviderById } from '../../storage.js';
+import type { Model, PendingRequest } from '../../types.js';
+import { getModel, selectProviderKeyRoundRobin, getProviderById, getNodeById } from '../../storage.js';
 import { generateRequestId } from '../../responseBuilder.js';
-import { forwardEmbeddingsRequest, isModelForwardingConfigured } from '../../forwarder.js';
+import { forwardEmbeddingsRequest, isModelForwardingConfigured, shouldUseNodeForwarding } from '../../forwarder.js';
+import { addPendingRequest, removePendingRequest } from '../../requestStore.js';
+import { sendRequestToNode, isNodeConnected } from '../../reverseWebSocket.js';
 
 const router: Router = Router();
 
@@ -41,6 +43,97 @@ router.post('/', async (req: Request, res: Response) => {
  code: 'model_type_not_supported',
  },
  });
+ }
+
+ // 检查是否应该通过节点转发
+ if (shouldUseNodeForwarding(model)) {
+ const node = getNodeById(model.nodeId!);
+ console.log('[Embeddings] Using node forwarding, node:', model.nodeId);
+
+ if (!isNodeConnected(model.nodeId!)) {
+ return res.status(503).json({
+ error: {
+ message: `Node ${model.nodeId} is not connected`,
+ type: 'node_error',
+ code: 'node_offline',
+ }
+ });
+ }
+
+ const requestId = generateRequestId();
+
+ // 创建 pending request
+ const pending: PendingRequest = {
+ requestId,
+ request: { model: modelId, messages: [] },
+ isStream: false,
+ createdAt: Date.now(),
+ resolve: () => {},
+ requestType: 'embedding' as any,
+ };
+
+ const responsePromise = new Promise<string>((resolve) => {
+ pending.resolve = resolve;
+ });
+
+ addPendingRequest(pending);
+ sendRequestToNode(model.nodeId!, pending);
+
+ const timeout = setTimeout(() => {
+ removePendingRequest(requestId);
+ res.json({
+ object: 'list',
+ data: [{
+ object: 'embedding',
+ embedding: new Array(1536).fill(0),
+ index: 0,
+ }],
+ model: modelId,
+ usage: {
+ prompt_tokens: 0,
+ total_tokens: 0,
+ },
+ id: requestId,
+ });
+ }, 10 * 60 * 1000);
+
+ try {
+ const content = await responsePromise;
+ clearTimeout(timeout);
+ removePendingRequest(requestId);
+
+ // 尝试解析响应
+ try {
+ const parsed = JSON.parse(content);
+ return res.json(parsed);
+ } catch {
+ // 如果无法解析，返回原始内容
+ return res.json({
+ object: 'list',
+ data: [{
+ object: 'embedding',
+ embedding: new Array(1536).fill(0),
+ index: 0,
+ }],
+ model: modelId,
+ usage: {
+ prompt_tokens: 0,
+ total_tokens: 0,
+ },
+ id: requestId,
+ });
+ }
+ } catch (error) {
+ clearTimeout(timeout);
+ removePendingRequest(requestId);
+ return res.status(500).json({
+ error: {
+ message: 'Internal server error',
+ type: 'server_error',
+ code: 'internal_error',
+ },
+ });
+ }
  }
 
  let runtimeModel: Model = model;
