@@ -93,7 +93,42 @@ export function calculateCost(
     return model.pricing.perRequest || 0;
   }
 
-  // 按 token 计费
+  if (pricingType === 'tiered' && model.pricing.tieredPricing) {
+    // 阶梯计费
+    const tieredPricing = model.pricing.tieredPricing;
+    let baseTokens: number;
+
+    // 根据配置确定计算基数
+    switch (tieredPricing.baseOn) {
+      case 'input':
+        baseTokens = promptTokens;
+        break;
+      case 'output':
+        baseTokens = completionTokens;
+        break;
+      case 'total':
+      default:
+        baseTokens = promptTokens + completionTokens;
+        break;
+    }
+
+    // 找到对应的阶梯
+    const tiers = tieredPricing.tiers.sort((a, b) => a.min - b.min);
+    let matchedTier = tiers[0]; // 默认使用第一个阶梯
+
+    for (const tier of tiers) {
+      if (baseTokens >= tier.min && (tier.max === null || baseTokens <= tier.max)) {
+        matchedTier = tier;
+        break;
+      }
+    }
+
+    // 计算总费用：总token数 * 每token价格
+    const totalTokens = promptTokens + completionTokens;
+    return totalTokens * (matchedTier.pricePerToken || 0);
+  }
+
+  // 按 token 计费（默认）
   const unit = model.pricing.unit || 'K';
   const divisor = unit === 'M' ? 1000000 : 1000;
 

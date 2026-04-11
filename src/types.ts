@@ -158,9 +158,17 @@ export interface Model {
     input?: number; // 输入每1K token价格（美元）
     output?: number; // 输出每1K token价格（美元）
     unit?: 'K' | 'M'; // 价格单位（K=千，M=百万）
-    type?: 'token' | 'request'; // 计费类型：按 token 或按请求
+    type?: 'token' | 'request' | 'tiered'; // 计费类型：按 token、按请求或阶梯计费
     perRequest?: number; // 按请求计费时的单价（美元）
     cacheRead?: number; // 缓存读取价格（美元）
+    tieredPricing?: { // 阶梯计费配置
+      baseOn: 'total' | 'input' | 'output'; // 基于什么计算阶梯（总token/输入token/输出token）
+      tiers: Array<{
+        min: number; // 最小token数（包含）
+        max: number | null; // 最大token数（包含），null表示无上限
+        pricePerToken: number; // 每token价格（美元）
+      }>;
+    };
   };
   
   // 速率限制

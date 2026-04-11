@@ -154,11 +154,18 @@ interface FormData {
   context_length: number;
   aliases: string;
   max_output_tokens: number;
-  pricing_type: 'token' | 'request';
+  pricing_type: 'token' | 'request' | 'tiered';
   pricing_input: number;
   pricing_output: number;
   pricing_per_request: number;
   pricing_cache_read: number;
+  // 阶梯计费
+  tiered_base_on: 'total' | 'input' | 'output';
+  tiered_tiers: Array<{
+    min: number;
+    max: number | null;
+    pricePerToken: number;
+  }>;
   // 转发模式
   forwardingMode: 'provider' | 'node' | 'none';
   providerId: string;
@@ -198,6 +205,8 @@ const defaultFormData: FormData = {
   pricing_output: 0,
   pricing_per_request: 0,
   pricing_cache_read: 0,
+  tiered_base_on: 'total',
+  tiered_tiers: [{ min: 0, max: null, pricePerToken: 0 }],
   forwardingMode: 'none',
   providerId: '',
   nodeId: '',
@@ -358,6 +367,8 @@ export default function ModelManager() {
         pricing_output: model.pricing?.output || 0,
         pricing_per_request: model.pricing?.perRequest || 0,
         pricing_cache_read: model.pricing?.cacheRead || 0,
+        tiered_base_on: model.pricing?.tieredPricing?.baseOn || 'total',
+        tiered_tiers: model.pricing?.tieredPricing?.tiers || [{ min: 0, max: null, pricePerToken: 0 }],
         forwardingMode,
         providerId: model.providerId || '',
         nodeId: model.nodeId || '',
@@ -411,12 +422,17 @@ export default function ModelManager() {
       aliases: formData.aliases ? formData.aliases.split(',').map(s => s.trim()).filter(Boolean) : undefined,
       max_output_tokens: formData.max_output_tokens,
       pricing: (formData.pricing_type === 'token' && (formData.pricing_input > 0 || formData.pricing_output > 0)) ||
-               (formData.pricing_type === 'request' && formData.pricing_per_request > 0) ? {
+               (formData.pricing_type === 'request' && formData.pricing_per_request > 0) ||
+               (formData.pricing_type === 'tiered' && formData.tiered_tiers.length > 0) ? {
         type: formData.pricing_type,
         input: formData.pricing_input,
         output: formData.pricing_output,
         perRequest: formData.pricing_per_request,
         cacheRead: formData.pricing_cache_read || undefined,
+        tieredPricing: formData.pricing_type === 'tiered' ? {
+          baseOn: formData.tiered_base_on,
+          tiers: formData.tiered_tiers.filter(tier => tier.pricePerToken > 0),
+        } : undefined,
       } : undefined,
       // 转发配置
       forwardingMode,
@@ -744,6 +760,7 @@ export default function ModelManager() {
                   >
                     <MenuItem value="token">{t('models.manager.pricingByToken')}</MenuItem>
                     <MenuItem value="request">{t('models.manager.pricingByRequest')}</MenuItem>
+                    <MenuItem value="tiered">{t('models.manager.pricingByTiered', '阶梯计费')}</MenuItem>
                   </Select>
                 </FormControl>
 
@@ -766,7 +783,7 @@ export default function ModelManager() {
                       inputProps={{ min: 0, step: 0.0001 }}
                     />
                   </Stack>
-                ) : (
+                ) : formData.pricing_type === 'request' ? (
                   <TextField
                     label={t('models.manager.pricePerRequest')}
                     type="number"
@@ -777,6 +794,98 @@ export default function ModelManager() {
                     inputProps={{ min: 0, step: 0.0001 }}
                     helperText={t('models.manager.pricePerRequestHelper')}
                   />
+                ) : (
+                  // 阶梯计费UI
+                  <Stack spacing={2}>
+                    <FormControl fullWidth size="small">
+                      <InputLabel>{t('models.manager.tieredBaseOn', '阶梯基数')}</InputLabel>
+                      <Select
+                        value={formData.tiered_base_on}
+                        label={t('models.manager.tieredBaseOn', '阶梯基数')}
+                        onChange={(e) => setFormData({ ...formData, tiered_base_on: e.target.value })}
+                      >
+                        <MenuItem value="total">{t('models.manager.tieredBaseTotal', '总Token数')}</MenuItem>
+                        <MenuItem value="input">{t('models.manager.tieredBaseInput', '输入Token数')}</MenuItem>
+                        <MenuItem value="output">{t('models.manager.tieredBaseOutput', '输出Token数')}</MenuItem>
+                      </Select>
+                    </FormControl>
+                    
+                    <Typography variant="body2" color="text.secondary">
+                      {t('models.manager.tieredTiers', '阶梯配置')}
+                    </Typography>
+                    
+                    {formData.tiered_tiers.map((tier, index) => (
+                      <Stack key={index} direction="row" spacing={1} alignItems="center">
+                        <TextField
+                          label={t('models.manager.tierMin', '最小')}
+                          type="number"
+                          value={tier.min}
+                          onChange={(e) => {
+                            const newTiers = [...formData.tiered_tiers];
+                            newTiers[index].min = parseInt(e.target.value) || 0;
+                            setFormData({ ...formData, tiered_tiers: newTiers });
+                          }}
+                          size="small"
+                          inputProps={{ min: 0 }}
+                          sx={{ width: '120px' }}
+                        />
+                        <Typography>-</Typography>
+                        <TextField
+                          label={t('models.manager.tierMax', '最大')}
+                          type="number"
+                          value={tier.max || ''}
+                          onChange={(e) => {
+                            const newTiers = [...formData.tiered_tiers];
+                            newTiers[index].max = e.target.value ? parseInt(e.target.value) : null;
+                            setFormData({ ...formData, tiered_tiers: newTiers });
+                          }}
+                          size="small"
+                          inputProps={{ min: 0 }}
+                          placeholder="∞"
+                          sx={{ width: '120px' }}
+                        />
+                        <TextField
+                          label={t('models.manager.tierPrice', '每Token价格($)')}
+                          type="number"
+                          value={tier.pricePerToken}
+                          onChange={(e) => {
+                            const newTiers = [...formData.tiered_tiers];
+                            newTiers[index].pricePerToken = parseFloat(e.target.value) || 0;
+                            setFormData({ ...formData, tiered_tiers: newTiers });
+                          }}
+                          size="small"
+                          inputProps={{ min: 0, step: 0.0000001 }}
+                          sx={{ flex: 1 }}
+                        />
+                        {formData.tiered_tiers.length > 1 && (
+                          <IconButton
+                            size="small"
+                            onClick={() => {
+                              const newTiers = formData.tiered_tiers.filter((_, i) => i !== index);
+                              setFormData({ ...formData, tiered_tiers: newTiers });
+                            }}
+                          >
+                            <X size={16} />
+                          </IconButton>
+                        )}
+                      </Stack>
+                    ))}
+                    
+                    <Button
+                      size="small"
+                      startIcon={<Plus size={16} />}
+                      onClick={() => {
+                        const lastTier = formData.tiered_tiers[formData.tiered_tiers.length - 1];
+                        const newMin = lastTier.max !== null ? lastTier.max + 1 : 0;
+                        setFormData({
+                          ...formData,
+                          tiered_tiers: [...formData.tiered_tiers, { min: newMin, max: null, pricePerToken: 0 }],
+                        });
+                      }}
+                    >
+                      {t('models.manager.addTier', '添加阶梯')}
+                    </Button>
+                  </Stack>
                 )}
 
                 <Divider sx={{ my: 1 }} />
@@ -1324,6 +1433,7 @@ export default function ModelManager() {
                 >
                   <MenuItem value="token">{t('models.manager.pricingByToken')}</MenuItem>
                   <MenuItem value="request">{t('models.manager.pricingByRequest')}</MenuItem>
+                  <MenuItem value="tiered">{t('models.manager.pricingByTiered', '阶梯计费')}</MenuItem>
                 </Select>
               </FormControl>
 
@@ -1344,7 +1454,7 @@ export default function ModelManager() {
                     inputProps={{ min: 0, step: 0.0001 }}
                   />
                 </Stack>
-              ) : (
+              ) : formData.pricing_type === 'request' ? (
                 <TextField
                   label={t('models.manager.pricePerRequest')}
                   type="number"
@@ -1354,6 +1464,95 @@ export default function ModelManager() {
                   inputProps={{ min: 0, step: 0.0001 }}
                   helperText={t('models.manager.pricePerRequestHelper')}
                 />
+              ) : (
+                // 阶梯计费UI
+                <Stack spacing={2}>
+                  <FormControl fullWidth>
+                    <InputLabel>{t('models.manager.tieredBaseOn', '阶梯基数')}</InputLabel>
+                    <Select
+                      value={formData.tiered_base_on}
+                      label={t('models.manager.tieredBaseOn', '阶梯基数')}
+                      onChange={(e) => setFormData({ ...formData, tiered_base_on: e.target.value })}
+                    >
+                      <MenuItem value="total">{t('models.manager.tieredBaseTotal', '总Token数')}</MenuItem>
+                      <MenuItem value="input">{t('models.manager.tieredBaseInput', '输入Token数')}</MenuItem>
+                      <MenuItem value="output">{t('models.manager.tieredBaseOutput', '输出Token数')}</MenuItem>
+                    </Select>
+                  </FormControl>
+                  
+                  <Typography variant="body2" color="text.secondary">
+                    {t('models.manager.tieredTiers', '阶梯配置')}
+                  </Typography>
+                  
+                  {formData.tiered_tiers.map((tier, index) => (
+                    <Stack key={index} direction="row" spacing={1} alignItems="center">
+                      <TextField
+                        label={t('models.manager.tierMin', '最小')}
+                        type="number"
+                        value={tier.min}
+                        onChange={(e) => {
+                          const newTiers = [...formData.tiered_tiers];
+                          newTiers[index].min = parseInt(e.target.value) || 0;
+                          setFormData({ ...formData, tiered_tiers: newTiers });
+                        }}
+                        inputProps={{ min: 0 }}
+                        sx={{ width: '120px' }}
+                      />
+                      <Typography>-</Typography>
+                      <TextField
+                        label={t('models.manager.tierMax', '最大')}
+                        type="number"
+                        value={tier.max || ''}
+                        onChange={(e) => {
+                          const newTiers = [...formData.tiered_tiers];
+                          newTiers[index].max = e.target.value ? parseInt(e.target.value) : null;
+                          setFormData({ ...formData, tiered_tiers: newTiers });
+                        }}
+                        inputProps={{ min: 0 }}
+                        placeholder="∞"
+                        sx={{ width: '120px' }}
+                      />
+                      <TextField
+                        label={t('models.manager.tierPrice', '每Token价格($)')}
+                        type="number"
+                        value={tier.pricePerToken}
+                        onChange={(e) => {
+                          const newTiers = [...formData.tiered_tiers];
+                          newTiers[index].pricePerToken = parseFloat(e.target.value) || 0;
+                          setFormData({ ...formData, tiered_tiers: newTiers });
+                        }}
+                        inputProps={{ min: 0, step: 0.0000001 }}
+                        sx={{ flex: 1 }}
+                      />
+                      {formData.tiered_tiers.length > 1 && (
+                        <IconButton
+                          size="small"
+                          onClick={() => {
+                            const newTiers = formData.tiered_tiers.filter((_, i) => i !== index);
+                            setFormData({ ...formData, tiered_tiers: newTiers });
+                          }}
+                        >
+                          <X size={16} />
+                        </IconButton>
+                      )}
+                    </Stack>
+                  ))}
+                  
+                  <Button
+                    size="small"
+                    startIcon={<Plus size={16} />}
+                    onClick={() => {
+                      const lastTier = formData.tiered_tiers[formData.tiered_tiers.length - 1];
+                      const newMin = lastTier.max !== null ? lastTier.max + 1 : 0;
+                      setFormData({
+                        ...formData,
+                        tiered_tiers: [...formData.tiered_tiers, { min: newMin, max: null, pricePerToken: 0 }],
+                      });
+                    }}
+                  >
+                    {t('models.manager.addTier', '添加阶梯')}
+                  </Button>
+                </Stack>
               )}
 
               <Divider sx={{ my: 1 }} />
