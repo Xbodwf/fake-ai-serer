@@ -1116,5 +1116,5 @@ export default function ModelManager() {
       </Box>
     );
   }
-
+}
 }
