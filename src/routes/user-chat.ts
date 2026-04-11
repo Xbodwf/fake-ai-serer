@@ -53,6 +53,38 @@ router.post('/', async (req: AuthRequest, res: Response) => {
       });
     }
 
+    // 自动会话更新：如果提供了sessionId，自动更新会话
+    const sessionId = body.sessionId;
+    if (sessionId) {
+      try {
+        const { getChatSessionById, updateChatSession } = await import('../storage.js');
+        const session = await getChatSessionById(sessionId);
+        
+        if (session && session.userId === userId) {
+          // 更新会话：添加用户消息
+          const userMessage = body.messages[body.messages.length - 1];
+          if (userMessage && userMessage.role === 'user') {
+            const newMessages = [...session.messages, {
+              role: userMessage.role,
+              content: typeof userMessage.content === 'string' 
+                ? userMessage.content 
+                : JSON.stringify(userMessage.content),
+              timestamp: Date.now(),
+            }];
+            
+            await updateChatSession(sessionId, { 
+              messages: newMessages,
+              updatedAt: Date.now(),
+            });
+            
+            console.log(`[User Chat] Updated session ${sessionId} with user message`);
+          }
+        }
+      } catch (error) {
+        console.error('[User Chat] Failed to update session with user message:', error);
+      }
+    }
+
     // 检查模型是否存在
     const model = getModel(body.model);
     if (!model) {
