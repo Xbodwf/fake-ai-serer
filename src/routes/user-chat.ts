@@ -484,8 +484,8 @@ async function handleUserChatRequest(
 
       const response = forwardResult.response;
 
-      // 记录使用情况
-      if (userId && apiKeyId) {
+      // 记录使用情况（JWT认证用户也要计费）
+      if (userId) {
         const cost = calculateCost(
           response.usage?.prompt_tokens || 0,
           response.usage?.completion_tokens || 0,
@@ -494,7 +494,7 @@ async function handleUserChatRequest(
 
         await createUsageRecord({
           userId,
-          apiKeyId,
+          apiKeyId: apiKeyId || 'jwt-auth', // JWT认证使用虚拟ID
           model: body.model,
           endpoint: 'chat',
           promptTokens: response.usage?.prompt_tokens || 0,
@@ -746,8 +746,8 @@ async function handleUserChatRequest(
       const promptContent = body.messages.map((m: Message) => getContentString(m.content)).join('\n');
       const response = buildResponse(content, body.model, requestId, promptContent);
 
-      // 记录使用情况
-      if (userId && apiKeyId) {
+      // 记录使用情况（JWT认证用户也要计费）
+      if (userId) {
         const cost = calculateCost(
           response.usage.prompt_tokens,
           response.usage.completion_tokens,
@@ -756,7 +756,7 @@ async function handleUserChatRequest(
 
         await createUsageRecord({
           userId,
-          apiKeyId,
+          apiKeyId: apiKeyId || 'jwt-auth', // JWT认证使用虚拟ID
           model: body.model,
           endpoint: 'chat',
           promptTokens: response.usage.prompt_tokens,
