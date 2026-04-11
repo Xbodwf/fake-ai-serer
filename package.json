@@ -9,7 +9,7 @@
     "dev:all": "concurrently \"pnpm dev\" \"pnpm dev:frontend\"",
     "build": "vite build",
     "build:frontend": "vite build",
-    "build:backend": "swc src -d dist --config-file .swcrc && tsc -p tsconfig.backend.json --emitDeclarationOnly",
+    "build:backend": "tsc -p tsconfig.backend.json",
     "build:backend:fast": "swc src -d dist --config-file .swcrc",
     "build:backend:oxc": "tsx scripts/build-oxc.ts",
     "build:all": "concurrently \"pnpm build:backend\" \"pnpm build:frontend\"",

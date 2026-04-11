@@ -35,6 +35,7 @@ import {
   Divider,
   Popover,
   Slider,
+  Fab,
 } from '@mui/material';
 import {
   Send,
