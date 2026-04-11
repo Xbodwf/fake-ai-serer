@@ -167,6 +167,22 @@ export function ModelCard({ model, onSelect, onPreview }: ModelCardProps) {
             <Typography variant="caption">
               {t('models.details.pricing')}: {formatPrice(model.pricing.perRequest, undefined, 'request')}
             </Typography>
+          ) : model.pricing?.type === 'tiered' && model.pricing?.tieredPricing ? (
+            <>
+              <Typography variant="caption" sx={{ fontWeight: 600 }}>
+                {t('models.tieredPricing', '阶梯计费')} ({model.pricing.tieredPricing.baseOn === 'total' ? t('models.tieredBaseTotal', '总Token') : model.pricing.tieredPricing.baseOn === 'input' ? t('models.tieredBaseInput', '输入Token') : t('models.tieredBaseOutput', '输出Token')})
+              </Typography>
+              {model.pricing.tieredPricing.tiers.slice(0, 3).map((tier, index) => (
+                <Typography key={index} variant="caption" color="text.secondary">
+                  {tier.min.toLocaleString()}-{tier.max ? tier.max.toLocaleString() : '∞'}: {formatCurrency(tier.pricePerToken)}/token
+                </Typography>
+              ))}
+              {model.pricing.tieredPricing.tiers.length > 3 && (
+                <Typography variant="caption" color="text.secondary">
+                  +{model.pricing.tieredPricing.tiers.length - 3} {t('models.moreTiers', '更多阶梯')}
+                </Typography>
+              )}
+            </>
           ) : (
             <>
               {model.pricing?.input && (
