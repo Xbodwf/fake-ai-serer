@@ -123,33 +123,18 @@ export default function AdminBackupPage() {
   };
 
   // 下载备份
-  const handleDownloadBackup = async (backup: Backup) => {
-    try {
-      const response = await fetch(`/api/admin/backup/download/${backup.id}`, {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
-        },
-      });
-
-      if (!response.ok) throw new Error('Download failed');
-
-      const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = backup.filename;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      window.URL.revokeObjectURL(url);
-    } catch (error) {
-      console.error('Failed to download backup:', error);
-      setSnackbar({
-        open: true,
-        message: t('backup.downloadError', '下载备份失败'),
-        severity: 'error',
-      });
-    }
+  const handleDownloadBackup = (backup: Backup) => {
+    // 使用浏览器原生下载方式
+    const token = localStorage.getItem('token');
+    const url = `/api/admin/backup/download/${backup.id}?token=${token}`;
+    
+    // 创建一个隐藏的a标签触发下载
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = backup.filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
   };
 
   // 删除备份

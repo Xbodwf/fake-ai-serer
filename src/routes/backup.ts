@@ -5,7 +5,6 @@ import unzipper from 'unzipper';
 import fs from 'fs';
 import path from 'path';
 import { getDB } from '../db/connection.js';
-import { backupMetadataCollection } from '../db/index.js';
 
 const router: Router = Router();
 
@@ -19,10 +18,15 @@ interface BackupMetadata {
   description?: string;
 }
 
+// 获取备份元数据集合
+function getBackupMetadataCollection() {
+  return getDB().collection('backup_metadata');
+}
+
 // 导出数据
 router.post('/export', async (req: AuthRequest, res: Response) => {
   try {
-    const userId = req.user?.id;
+    const userId = req.user?.userId;
     if (!userId) {
       return res.status(401).json({ error: 'Unauthorized' });
     }
@@ -54,7 +58,7 @@ router.post('/export', async (req: AuthRequest, res: Response) => {
       const size = archive.pointer();
       
       // 保存备份元数据
-      await backupMetadataCollection.insertOne({
+      await getBackupMetadataCollection().insertOne({
         id: backupId,
         filename,
         size,
@@ -122,7 +126,7 @@ router.post('/export', async (req: AuthRequest, res: Response) => {
 // 获取备份列表
 router.get('/list', async (req: AuthRequest, res: Response) => {
   try {
-    const backups = await backupMetadataCollection
+    const backups = await getBackupMetadataCollection()
       .find({})
       .sort({ createdAt: -1 })
       .toArray();
@@ -139,7 +143,7 @@ router.get('/download/:id', async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params;
     
-    const backup = await backupMetadataCollection.findOne({ id });
+    const backup = await getBackupMetadataCollection().findOne({ id });
     if (!backup) {
       return res.status(404).json({ error: 'Backup not found' });
     }
@@ -162,7 +166,7 @@ router.delete('/:id', async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params;
     
-    const backup = await backupMetadataCollection.findOne({ id });
+    const backup = await getBackupMetadataCollection().findOne({ id });
     if (!backup) {
       return res.status(404).json({ error: 'Backup not found' });
     }
@@ -174,7 +178,7 @@ router.delete('/:id', async (req: AuthRequest, res: Response) => {
     }
 
     // 删除元数据
-    await backupMetadataCollection.deleteOne({ id });
+    await getBackupMetadataCollection().deleteOne({ id });
 
     res.json({ success: true });
   } catch (error: any) {
@@ -186,7 +190,7 @@ router.delete('/:id', async (req: AuthRequest, res: Response) => {
 // 导入数据
 router.post('/import', async (req: AuthRequest, res: Response) => {
   try {
-    const userId = req.user?.id;
+    const userId = req.user?.userId;
     if (!userId) {
       return res.status(401).json({ error: 'Unauthorized' });
     }
