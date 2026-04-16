@@ -34,6 +34,7 @@ import { AdminNotificationsPage } from './pages/AdminNotificationsPage';
 import { AdminRedeemCodesPage } from './pages/AdminRedeemCodesPage';
 import { AdminProvidersPage } from './pages/AdminProvidersPage';
 import { AdminNodesPage } from './pages/AdminNodesPage';
+import AdminBackupPage from './pages/AdminBackupPage';
 import { ModelMarketplace } from './pages/ModelMarketplace';
 import ModelManager from './components/ModelManager';
 import { NotFoundPage } from './pages/NotFoundPage';
@@ -476,6 +477,16 @@ function AppContent() {
                 <ProtectedRoute requiredRole="admin">
                   <AdminLayout>
                     <AdminNodesPage />
+                  </AdminLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/console/backup"
+              element={
+                <ProtectedRoute requiredRole="admin">
+                  <AdminLayout>
+                    <AdminBackupPage />
                   </AdminLayout>
                 </ProtectedRoute>
               }

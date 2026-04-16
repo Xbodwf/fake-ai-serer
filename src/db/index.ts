@@ -14,3 +14,7 @@ export * as invitationsDB from './invitations';
 export * as paymentOrdersDB from './paymentOrders';
 export * as providersDB from './providers';
 export * as nodesDB from './nodes';
+
+// 备份元数据集合（直接导出集合对象）
+import { getDB } from './connection';
+export const backupMetadataCollection = getDB().collection('backup_metadata');

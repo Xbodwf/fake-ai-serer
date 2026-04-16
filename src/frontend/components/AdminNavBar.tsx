@@ -34,6 +34,7 @@ import {
   ChevronDown,
   Home,
   User,
+  Database,
 } from 'lucide-react';
 import { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
@@ -65,6 +66,7 @@ export function AdminNavBar() {
     { label: t('nav.redeemCodes'), path: '/console/redeem-codes', icon: <Ticket size={20} /> },
     { label: t('nav.providers'), path: '/console/providers', icon: <Server size={20} /> },
     { label: t('nav.nodes'), path: '/console/nodes', icon: <Network size={20} /> },
+    { label: t('nav.backup', '数据备份'), path: '/console/backup', icon: <Database size={20} /> },
     { label: t('nav.loginSettings'), path: '/console/settings', icon: <Settings size={20} /> },
   ];
 
