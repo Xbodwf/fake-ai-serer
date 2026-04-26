@@ -163,7 +163,33 @@ router.post('/', async (req: Request, res: Response) => {
  };
 
  if (isStream) {
- // Anthropic 流式响应格式
+ // 检查是否需要转发（流式转发）
+ if (hasForwarding && model) {
+ console.log('[Forwarder] 流式转发模式：支持的 API 类型');
+ try {
+ // 导入流式转发函数
+ const { forwardStreamRequest } = await import('../../forwarder');
+ 
+ // 直接转发到 API，不经过本地处理
+ await forwardStreamRequest(model, chatRequest, res);
+ return;
+ } catch (error: any) {
+ console.error('[Messages] 流式转发失败:', error.message);
+ // 转发失败，返回错误响应
+ if (!res.headersSent) {
+ return res.status(502).json({
+ type: 'error',
+ error: {
+ type: 'streaming_forward_error',
+ message: `Streaming forward failed: ${error.message}`
+ }
+ });
+ }
+ return;
+ }
+ }
+
+ // Anthropic 流式响应格式（本地处理）
  res.setHeader('Content-Type', 'text/event-stream');
  res.setHeader('Cache-Control', 'no-cache');
  res.setHeader('Connection', 'keep-alive');

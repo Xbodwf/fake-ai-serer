@@ -109,6 +109,21 @@ function getEffectiveApiKey(model: Model): string {
 }
 
 /**
+ * 合并默认请求头和运行时请求头
+ * 运行时请求头优先级更高
+ */
+export function mergeHeaders(
+  defaultHeaders?: Record<string, string>,
+  runtimeHeaders?: Record<string, string>
+): Record<string, string> {
+  const merged = { ...defaultHeaders };
+  if (runtimeHeaders) {
+    Object.assign(merged, runtimeHeaders);
+  }
+  return merged;
+}
+
+/**
  * 检查模型是否应该通过节点转发
  */
 export function shouldUseNodeForwarding(model: Model): boolean {
@@ -167,17 +182,15 @@ export function resolveForwardUrl(
  forwardModel: string
 ): string {
  // 从 model 或 provider 或 node 获取配置
- let effectiveBaseUrl = model.api_base_url || '';
+ let effectiveBaseUrl = '';
  let effectiveApiKey = model.api_key || '';
 
- // 如果 model 已经有 api_key 和 api_base_url，直接使用（可能是 runtimeModel）
- const hasRuntimeConfig = model.api_key && model.api_base_url;
-
- // 如果配置了 provider 且没有 runtime config，从 provider 获取 base URL 和 key
- if (!hasRuntimeConfig && model.forwardingMode === 'provider' && model.providerId) {
+ // 优先级：provider/node 模式 > model 直接配置
+ // 如果配置了 provider，从 provider 获取 base URL 和 key
+ if (model.forwardingMode === 'provider' && model.providerId) {
  const provider = getProviderById(model.providerId);
  if (provider) {
- effectiveBaseUrl = provider.api_base_url || effectiveBaseUrl;
+ effectiveBaseUrl = provider.api_base_url || '';
  // 使用 provider 的 key（轮询选择）
  if (provider.keys && provider.keys.length > 0) {
  const enabledKeys = provider.keys.filter(k => k.enabled);
@@ -198,6 +211,11 @@ export function resolveForwardUrl(
  throw new Error('Node forwarding should use WebSocket, not HTTP');
  }
  throw new Error(`Node ${model.nodeId} is not online`);
+ }
+
+ // 如果 provider/node 模式没有获取到 base URL，使用 model 直接配置的 api_base_url（向后兼容）
+ if (!effectiveBaseUrl && model.api_base_url) {
+ effectiveBaseUrl = model.api_base_url;
  }
 
  if (!effectiveApiKey) {
@@ -443,6 +461,13 @@ export async function forwardStreamRequest(
     throw new Error('Model not configured for forwarding');
   }
 
+  // 检查模型 API 类型，决定使用哪个流式转发函数
+  const apiType = model.api_type || 'openai-chat';
+  
+  if (apiType === 'anthropic') {
+    return forwardAnthropicStream(model, body, res);
+  }
+
   // 生成统一的请求 ID
   const requestId = generateRequestId();
 
@@ -479,7 +504,7 @@ export async function forwardStreamRequest(
       });
     }
     
-    // 处理 functions 数组（旧版格式）
+    // 处理 functions 数组（旧版格��）
     if (forwardBody.functions && Array.isArray(forwardBody.functions)) {
       forwardBody.functions = forwardBody.functions.map((func: any) => {
         if (!func.thought_signature) {
@@ -608,11 +633,16 @@ async function forwardToOpenAI(
     }
   }
 
+  const baseHeaders = {
+    'Authorization': `Bearer ${apiKey}`,
+    'Content-Type': 'application/json',
+  };
+
+  // 合并默认请求头（模型级别配置的默认请求头）
+  const headers = mergeHeaders(model.defaultHeaders, baseHeaders);
+
   const axiosConfig: any = {
-    headers: {
-      'Authorization': `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-    },
+    headers,
     timeout: 120000, // 2 分钟超时
   };
 
@@ -637,7 +667,208 @@ async function forwardToOpenAI(
 }
 
 /**
- * 转发到 Anthropic Claude API
+ * 将 OpenAI 格式转换为 Anthropic 格式
+ */
+function convertOpenAIToAnthropic(
+  body: ChatCompletionRequest,
+  modelId: string
+): any {
+  // 提取系统消息
+  let systemContent = '';
+  const messages = [];
+
+  for (const msg of body.messages) {
+    if (msg.role === 'system') {
+      const content = typeof msg.content === 'string' ? msg.content : '';
+      systemContent += (systemContent ? '\n' : '') + content;
+    } else {
+      const msgContent = typeof msg.content === 'string'
+        ? msg.content
+        : Array.isArray(msg.content)
+        ? msg.content
+            .map((item: any) => {
+              if (item.type === 'text') return item.text;
+              if (item.type === 'image_url') return `[Image: ${item.image_url?.url}]`;
+              return '';
+            })
+            .join('\n')
+        : '';
+
+      messages.push({
+        role: msg.role === 'assistant' ? 'assistant' : 'user',
+        content: msgContent,
+      });
+    }
+  }
+
+  const anthropicBody: any = {
+    model: modelId,
+    max_tokens: body.max_tokens || 1024,
+    messages,
+    stream: true, // 对于流式请求，始终启用 stream
+  };
+
+  if (systemContent) {
+    anthropicBody.system = systemContent;
+  }
+
+  if (body.temperature !== undefined) {
+    anthropicBody.temperature = body.temperature;
+  }
+
+  if (body.top_p !== undefined) {
+    anthropicBody.top_p = body.top_p;
+  }
+
+  return anthropicBody;
+}
+
+/**
+ * 转发 Anthropic 流式请求，转换为 OpenAI SSE 格式
+ */
+async function forwardAnthropicStream(
+  model: Model,
+  body: ChatCompletionRequest,
+  res: Response
+): Promise<void> {
+  // 生成统一的请求 ID
+  const requestId = generateRequestId();
+
+  // 设置流式响应头
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no');
+
+  const forwardModel = getForwardModelName(model, body.model);
+  const url = resolveForwardUrl(model, 'anthropicMessages', body.model, forwardModel);
+  const apiKey = getEffectiveApiKey(model);
+
+  console.log(`[Forwarder] Anthropic 流式转发 URL: ${url}`);
+  console.log(`[Forwarder] API Key: ${hideKey(apiKey)}`);
+
+  // 转换消息格式：OpenAI -> Anthropic
+  const anthropicBody = convertOpenAIToAnthropic(body, forwardModel);
+
+  const baseHeaders = {
+    'x-api-key': apiKey,
+    'anthropic-version': '2023-06-01',
+    'Content-Type': 'application/json',
+  };
+
+  // 合并默认请求头
+  const headers = mergeHeaders(model.defaultHeaders, baseHeaders);
+
+  const axiosConfig: any = {
+    headers,
+    timeout: 120000,
+    responseType: 'stream',
+    maxContentLength: Infinity,
+    maxBodyLength: Infinity,
+  };
+
+  try {
+    const response = await axios.post(url, anthropicBody, axiosConfig);
+
+    let clientClosed = false;
+
+    // 监听客户端断开连接
+    res.on('close', () => {
+      if (!clientClosed) {
+        clientClosed = true;
+        console.log('[Forwarder] Anthropic Stream - Client disconnected');
+        if (response.data && typeof response.data.destroy === 'function') {
+          response.data.destroy();
+        }
+      }
+    });
+
+    // 处理 Anthropic SSE 流，转换为 OpenAI 格式
+    response.data.on('data', (chunk: Buffer) => {
+      if (clientClosed) return;
+
+      const lines = chunk.toString().split('\n');
+      for (const line of lines) {
+        if (line.startsWith('data: ')) {
+          try {
+            const data = JSON.parse(line.slice(6));
+
+            // 处理 Anthropic 的 content_block_delta 事件
+            if (data.type === 'content_block_delta') {
+              const delta = data.delta;
+              if (delta.type === 'text_delta') {
+                const openaiChunk = {
+                  id: requestId,
+                  object: 'chat.completion.chunk',
+                  created: Math.floor(Date.now() / 1000),
+                  model: body.model,
+                  choices: [{
+                    index: 0,
+                    delta: { content: delta.text || '' },
+                    finish_reason: null,
+                  }],
+                };
+                res.write(`data: ${JSON.stringify(openaiChunk)}\n\n`);
+              }
+            }
+
+            // 处理 message_stop 事件
+            if (data.type === 'message_stop') {
+              const openaiChunk = {
+                id: requestId,
+                object: 'chat.completion.chunk',
+                created: Math.floor(Date.now() / 1000),
+                model: body.model,
+                choices: [{
+                  index: 0,
+                  delta: { content: '' },
+                  finish_reason: 'stop',
+                }],
+              };
+              res.write(`data: ${JSON.stringify(openaiChunk)}\n\n`);
+              res.write('data: [DONE]\n\n');
+            }
+          } catch (e) {
+            // 忽略解析错误
+            console.error('[Forwarder] Anthropic stream parsing error:', e);
+          }
+        }
+      }
+    });
+
+    response.data.on('end', () => {
+      if (!clientClosed) {
+        if (!response.data.terminated) {
+          res.write('data: [DONE]\n\n');
+        }
+        res.end();
+      }
+    });
+
+    response.data.on('error', (err: Error) => {
+      console.error('[Forwarder] Anthropic stream error:', err.message);
+      if (!clientClosed) {
+        res.end();
+      }
+    });
+  } catch (error: any) {
+    console.error('[Forwarder] Anthropic stream request failed:', error.message);
+    if (!res.headersSent) {
+      res.status(502).json({
+        error: {
+          message: `Anthropic streaming failed: ${error.message}`,
+          type: 'forwarding_error',
+          code: 'anthropic_stream_failed',
+        },
+      });
+    } else {
+      res.end();
+    }
+  }
+}
+
+/**
+ * 转发到 Anthropic API
  */
 async function forwardToAnthropic(
   model: Model,
@@ -696,12 +927,17 @@ async function forwardToAnthropic(
     system: systemMessages.length > 0 ? systemMessages[0].content : undefined,
   };
 
+  const baseHeaders = {
+    'x-api-key': apiKey,
+    'anthropic-version': '2023-06-01',
+    'Content-Type': 'application/json',
+  };
+
+  // 合并默认请求头
+  const headers = mergeHeaders(model.defaultHeaders, baseHeaders);
+
   const axiosConfig: any = {
-    headers: {
-      'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01',
-      'Content-Type': 'application/json',
-    },
+    headers,
     timeout: 120000,
   };
 
@@ -713,7 +949,17 @@ async function forwardToAnthropic(
     axiosConfig.responseType = 'json';
   }
 
-  const response = await axios.post(url, anthropicBody, axiosConfig);
+  let response;
+  try {
+    response = await axios.post(url, anthropicBody, axiosConfig);
+  } catch (error: any) {
+    console.error('[Forwarder] Anthropic request failed:', error.message);
+    if (error.response) {
+      console.error('[Forwarder] Response status:', error.response.status);
+      console.error('[Forwarder] Response data:', JSON.stringify(error.response.data));
+    }
+    throw error;
+  }
 
   // 转换响应格式：Anthropic -> OpenAI
   if (!body.stream) {
@@ -742,7 +988,72 @@ async function forwardToAnthropic(
     };
   }
 
-  return { success: true, response: response.data };
+  // 流式响应：转换 Anthropic SSE 格式为 OpenAI SSE 格式
+  const { Readable } = require('stream');
+  const transformedStream = new Readable({
+    read() {},
+  });
+
+  if (response.data && typeof response.data.on === 'function') {
+    response.data.on('data', (chunk: Buffer) => {
+      const lines = chunk.toString().split('\n');
+      for (const line of lines) {
+        if (line.startsWith('data: ')) {
+          try {
+            const data = JSON.parse(line.slice(6));
+            
+            // 处理 Anthropic 的 content_block_delta 事件
+            if (data.type === 'content_block_delta') {
+              const delta = data.delta;
+              if (delta.type === 'text_delta') {
+                const openaiChunk = {
+                  id: generateRequestId(),
+                  object: 'chat.completion.chunk',
+                  created: Math.floor(Date.now() / 1000),
+                  model: body.model,
+                  choices: [{
+                    index: 0,
+                    delta: { content: delta.text || '' },
+                    finish_reason: null,
+                  }],
+                };
+                transformedStream.push(`data: ${JSON.stringify(openaiChunk)}\n`);
+              }
+            }
+            
+            // 处理 message_stop 事件
+            if (data.type === 'message_stop') {
+              const openaiChunk = {
+                id: generateRequestId(),
+                object: 'chat.completion.chunk',
+                created: Math.floor(Date.now() / 1000),
+                model: body.model,
+                choices: [{
+                  index: 0,
+                  delta: { content: '' },
+                  finish_reason: 'stop',
+                }],
+              };
+              transformedStream.push(`data: ${JSON.stringify(openaiChunk)}\n`);
+              transformedStream.push('data: [DONE]\n');
+            }
+          } catch (e) {
+            // 忽略解析错误
+          }
+        }
+      }
+    });
+
+    response.data.on('error', (error: any) => {
+      transformedStream.destroy(error);
+    });
+
+    response.data.on('end', () => {
+      transformedStream.push(null);
+    });
+  }
+
+  return { success: true, response: transformedStream };
 }
 
 /**

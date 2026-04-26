@@ -187,6 +187,7 @@ export interface Model {
   api_url_path?: string; // 相对路径，如 /v1/chat/completions
   api_url_templates?: ApiUrlTemplates; // 按 endpoint 自定义完整转发 URL 模板（已废弃，使用 api_url_path）
   forwardModelName?: string; // 转发时使用的模型名称（不同平台模型名称可能不同）
+  defaultHeaders?: Record<string, string>; // 转发请求时的默认请求头（如 thinking_mode 等），运行时请求头优先级更高
   supported_features?: string[]; // 支持的特性，如 ['chat', 'vision', 'function_calling']
   require_api_key?: boolean; // 是否需要API Key才能访问（默认true）
   allowManualReply?: boolean; // 是否允许人工回复（允许的模型才会在请求列表中显示）

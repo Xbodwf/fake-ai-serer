@@ -162,6 +162,13 @@ const MAX_FILE_COUNT = 3;
 const MAX_FILE_SIZE_TEXT = 200 * 1024 * 1024;
 const MAX_FILE_SIZE_IMAGE = 10 * 1024 * 1024;
 const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+const ALLOWED_CODE_TYPES = [
+  '.js', '.ts', '.jsx', '.tsx', '.mjs', '.cjs',
+  '.py', '.py3', '.pyx',
+  '.go', '.java', '.c', '.cpp', '.cs', '.rb', '.php', '.swift', '.kt',
+  '.json', '.yaml', '.yml', '.xml', '.html', '.css', '.scss', '.less',
+  '.sql', '.sh', '.bash', '.lua', '.rs', '.r', '.m', '.scala', '.clj'
+];
 const DEFAULT_TIMEOUT = 60;
 
 const API_TYPES: { value: ApiType; label: string }[] = [
@@ -1063,7 +1070,7 @@ export function UserChatPage() {
     // 有 URL 参数，尝试加载指定会话
     console.log(`[Chat] Loading session from URL: ${sessionIdFromUrl}`);
 
-    // 先检查会话是否已经在列表中
+    // 先检���会话是否已经在列表中
     const existingSession = sessions.find((s) => s.id === sessionIdFromUrl);
     if (existingSession) {
       // 已经加载过，直接使用
@@ -1235,6 +1242,22 @@ export function UserChatPage() {
     });
   };
 
+  // 检查文件是否是支持的类型
+  const isSupportedFileType = (file: File): boolean => {
+    const isImage = ALLOWED_IMAGE_TYPES.includes(file.type);
+    const isText = file.type.startsWith('text/') || file.name.endsWith('.txt') || file.name.endsWith('.md');
+    
+    // 检查是否是代码文件（基于扩展名）
+    const isCode = ALLOWED_CODE_TYPES.some(ext => file.name.toLowerCase().endsWith(ext));
+    
+    return isImage || isText || isCode;
+  };
+
+  // 判断是否为图片文件
+  const isImageFile = (file: File): boolean => {
+    return ALLOWED_IMAGE_TYPES.includes(file.type);
+  };
+
   const handleChooseFiles = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const selected = event.target.files;
     if (!selected || selected.length === 0) return;
@@ -1249,14 +1272,12 @@ export function UserChatPage() {
 
     for (let i = 0; i < selected.length; i++) {
       const file = selected[i];
-      const isImage = ALLOWED_IMAGE_TYPES.includes(file.type);
-      const isText = file.type.startsWith('text/') || file.name.endsWith('.txt') || file.name.endsWith('.md');
 
-      if (!isImage && !isText) continue;
+      if (!isSupportedFileType(file)) continue;
 
-      const maxSize = isImage ? MAX_FILE_SIZE_IMAGE : MAX_FILE_SIZE_TEXT;
+      const maxSize = isImageFile(file) ? MAX_FILE_SIZE_IMAGE : MAX_FILE_SIZE_TEXT;
       if (file.size > maxSize) {
-        setError(isImage ? '图片最大10MB' : '文件最大200MB');
+        setError(isImageFile(file) ? '图片最大10MB' : '文件最大200MB');
         continue;
       }
 
@@ -1282,7 +1303,7 @@ export function UserChatPage() {
       const file = Array.from(selected).find(f => f.name === uploaded.name && f.size === uploaded.size);
       if (!file) continue;
 
-      const isImage = ALLOWED_IMAGE_TYPES.includes(file.type);
+      const isImage = isImageFile(file);
 
       try {
         // 模拟进度更新
@@ -1313,6 +1334,7 @@ export function UserChatPage() {
             setFiles((prev) => prev.map(f => f.id === uploaded.id ? { ...f, loading: false, progress: 100 } : f));
           }
         } else {
+          // 对于代码文件和文本文件，读取为文本并直接使用（不上传到服务器）
           const textContent = await readFileAsText(file);
           setFiles((prev) => prev.map(f => f.id === uploaded.id ? { ...f, textContent, loading: false, progress: 100 } : f));
         }
@@ -1503,15 +1525,42 @@ export function UserChatPage() {
       let currentUserContent: string | Array<{ type: string; text?: string; image_url?: { url: string } }>;
 
       if (filesForRequest.length > 0) {
-        currentUserContent = [
-          { type: 'text', text: userMessage.content },
-          ...filesForRequest
-            .filter((f) => f.dataUrl)
-            .map((f) => ({
-              type: 'image_url',
-              image_url: { url: f.dataUrl! },
-            })),
+        const contentArray: Array<any> = [
+          { type: 'text', text: userMessage.content }
         ];
+
+        // 添加图片
+        for (const f of filesForRequest) {
+          if (f.dataUrl && isImageFile(new File([], f.name, { type: f.type }))) {
+            contentArray.push({
+              type: 'image_url',
+              image_url: { url: f.dataUrl },
+            });
+          }
+        }
+
+        // 添加代码/文本文件内容为文本
+        for (const f of filesForRequest) {
+          if (f.textContent && !f.dataUrl) {
+            // 为代码文件添加语言标记（���于渲染）
+            const ext = f.name.substring(f.name.lastIndexOf('.') + 1).toLowerCase();
+            const langMap: Record<string, string> = {
+              'js': 'javascript', 'ts': 'typescript', 'jsx': 'jsx', 'tsx': 'tsx',
+              'py': 'python', 'go': 'go', 'java': 'java', 'c': 'c', 'cpp': 'cpp',
+              'cs': 'csharp', 'rb': 'ruby', 'php': 'php', 'sh': 'bash',
+              'json': 'json', 'yaml': 'yaml', 'yml': 'yaml', 'xml': 'xml',
+              'html': 'html', 'css': 'css', 'sql': 'sql'
+            };
+            const language = langMap[ext] || ext;
+            
+            contentArray.push({
+              type: 'text',
+              text: `[文件: ${f.name}]\n\`\`\`${language}\n${f.textContent}\n\`\`\``
+            });
+          }
+        }
+
+        currentUserContent = contentArray;
       } else {
         currentUserContent = userMessage.content;
       }
@@ -1712,26 +1761,41 @@ export function UserChatPage() {
       setLoading(false);
       setAbortController(null);
 
-      // 将更新后的会话同步到服务器
-      // 使用函数式更新来获取最新的会话状态
+      // 将更新后的会话同步到服务器并清除流式传输标记
       if (currentSessionId) {
         setSessions(prevSessions => {
           const updatedSession = prevSessions.find(s => s.id === currentSessionId);
           if (updatedSession) {
-            // 同步完整的会话数据到服务器
+            // 清除最后一条消息的流式传输标记
+            const messages = [...updatedSession.messages];
+            if (messages.length > 0 && messages[messages.length - 1].role === 'assistant') {
+              messages[messages.length - 1] = {
+                ...messages[messages.length - 1],
+                _isStreaming: undefined, // 清除流式传输标记
+              };
+            }
+
+            const sessionToSync = {
+              ...updatedSession,
+              messages,
+            };
+
+            // 同步完整的会话数据到服务器（所有持久化通过云端）
             updateSession(currentSessionId, {
-              messages: updatedSession.messages,
-              title: updatedSession.title,
-              model: updatedSession.model,
-              systemPrompt: updatedSession.systemPrompt,
-              apiType: updatedSession.apiType,
-              stream: updatedSession.stream,
-              timeout: updatedSession.timeout,
+              messages: sessionToSync.messages,
+              title: sessionToSync.title,
+              model: sessionToSync.model,
+              systemPrompt: sessionToSync.systemPrompt,
+              apiType: sessionToSync.apiType,
+              stream: sessionToSync.stream,
+              timeout: sessionToSync.timeout,
             }).catch(err => {
               console.error('Failed to sync session to server:', err);
             });
+
+            return prevSessions; // 返回不变的状态
           }
-          return prevSessions; // 返回不变的状态
+          return prevSessions;
         });
       }
 
@@ -1851,16 +1915,21 @@ export function UserChatPage() {
   return (
     <Box
       sx={{
-        position: 'absolute',
+        position: 'fixed',
         top: 0,
         left: 0,
         right: 0,
         bottom: 0,
         display: 'flex',
         overflow: 'hidden',
+        background: theme.palette.mode === 'dark' 
+          ? 'radial-gradient(circle at 20% 50%, rgba(59, 130, 246, 0.1) 0%, rgba(0,0,0,0.3) 50%, rgba(0,0,0,0.9) 100%)'
+          : 'radial-gradient(circle at 20% 50%, rgba(59, 130, 246, 0.05) 0%, rgba(0,0,0,0.05) 50%, rgba(255,255,255,0.8) 100%)',
+        backdropFilter: 'blur(2px)',
+        zIndex: 1,
       }}
     >
-      {/* 聊天区域 */}
+      {/* 聊天区域 - 悬浮卡片 */}
       <Box
         sx={{
           flex: 1,
@@ -1869,6 +1938,17 @@ export function UserChatPage() {
           overflow: 'hidden',
           minWidth: 0,
           position: 'relative',
+          m: 2,
+          borderRadius: '20px',
+          bgcolor: 'background.paper',
+          boxShadow: theme.palette.mode === 'dark' 
+            ? '0 20px 60px rgba(0, 0, 0, 0.8)' 
+            : '0 20px 60px rgba(0, 0, 0, 0.15)',
+          border: 1,
+          borderColor: theme.palette.mode === 'dark'
+            ? 'rgba(255,255,255,0.08)'
+            : 'rgba(0,0,0,0.08)',
+          overflow: 'hidden',
         }}
       >
         {/* 消息区域 - 可滚动 */}
@@ -1881,7 +1961,9 @@ export function UserChatPage() {
             overflowX: 'hidden',
             pt: 2,
             pb: currentSession ? '160px' : 2, // 有对话时为底部固定输入框留出空间
-            bgcolor: 'background.default',
+            bgcolor: theme.palette.mode === 'dark' 
+              ? 'rgba(0, 0, 0, 0.3)' 
+              : 'rgba(255, 255, 255, 0.5)',
           }}
         >
           {!currentSession ? (
@@ -2029,11 +2111,12 @@ export function UserChatPage() {
               bottom: 0,
               left: 0,
               right: 0,
-              bgcolor: 'background.paper',
+              background: `linear-gradient(to top, ${theme.palette.mode === 'dark' ? 'rgba(0,0,0,0.8), rgba(0,0,0,0.4), transparent' : 'rgba(255,255,255,0.9), rgba(255,255,255,0.5), transparent'})`,
               borderTop: 1,
-              borderColor: 'divider',
+              borderColor: theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)',
               p: 2,
               zIndex: 5,
+              backdropFilter: 'blur(10px)',
             }}
           >
             {/* 附件预览 */}
