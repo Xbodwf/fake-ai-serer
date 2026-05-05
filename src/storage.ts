@@ -279,13 +279,28 @@ export async function validateApiKey(key: string): Promise<ApiKey | null> {
   if (!apiKey.userId) {
     return null; // API key 没有关联用户
   }
-  const user = getUserById(apiKey.userId);
+  let user = getUserById(apiKey.userId);
+
+  // 内存缓存中没找到，尝试直接查数据库（防止缓存未加载导致误删）
   if (!user) {
-    // 用户不存在，删除孤儿 API key
-    console.log(`[API Key] Orphan API key detected: ${apiKey.id}, userId: ${apiKey.userId}, deleting...`);
-    if (apiKey.id) {
-      await deleteApiKey(apiKey.id);
+    console.log(`[API Key] User ${apiKey.userId} not found in cache for key ${apiKey.id}, checking DB...`);
+    try {
+      const dbUser = await usersDB.getUser(apiKey.userId);
+      if (dbUser) {
+        // 数据库中有用户但缓存没有，可能是缓存过期或未加载
+        // 尝试刷新用户缓存
+        console.log(`[API Key] User ${apiKey.userId} found in DB but not in cache, reloading users...`);
+        await loadUsers();
+        user = getUserById(apiKey.userId);
+      }
+    } catch (e) {
+      console.error(`[API Key] DB lookup failed for user ${apiKey.userId}:`, e);
     }
+  }
+
+  if (!user) {
+    // 用户确实不存在（数据库中也查不到），记录日志但不删除
+    console.log(`[API Key] Orphan API key detected: ${apiKey.id}, userId: ${apiKey.userId} — NOT deleting (preserving data integrity)`);
     return null;
   }
   
@@ -896,4 +911,22 @@ export function getWorkflowsByCreator(userId: string): Workflow[] {
 // 获取公开的工作流
 export function getPublicWorkflows(): Workflow[] {
   return workflowsCache.filter(w => w.isPublic);
+}
+
+// ==================== 缓存重载（导入备份后使用）====================
+
+export async function reloadAllCaches(): Promise<void> {
+  console.log('[Storage] Reloading all caches from database...');
+  await loadModels();
+  await loadApiKeys();
+  await loadUsers();
+  await loadUsageRecords();
+  await loadInvoices();
+  await loadActions();
+  await loadWorkflows();
+  await loadInvitationRecords();
+  await loadNotifications();
+  await loadProviders();
+  await loadNodes();
+  console.log('[Storage] All caches reloaded successfully');
 }

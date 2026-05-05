@@ -1,5 +1,5 @@
 // Database connection
-export { connectDB, getDB, disconnectDB } from './connection';
+export { connectDB, getDB, getClient, disconnectDB } from './connection';
 export { initializeIndexes } from './indexes';
 
 // Collections

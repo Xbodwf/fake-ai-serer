@@ -5,7 +5,9 @@ import unzipper from 'unzipper';
 import fs from 'fs';
 import path from 'path';
 import multer from 'multer';
-import { getDB } from '../db/connection.js';
+import { EJSON } from 'mongodb';
+import { getDB, getClient } from '../db/connection.js';
+import { reloadAllCaches } from '../storage.js';
 
 const upload = multer({ dest: 'temp-uploads/' });
 
@@ -88,9 +90,9 @@ router.post('/export', async (req: AuthRequest, res: Response) => {
 
       const data = await db.collection(collectionName).find({}).toArray();
       
-      // 将数据写入JSON文件
-      archive.append(JSON.stringify(data, null, 2), { 
-        name: `data/${collectionName}.json` 
+      // 将数据写入JSON文件（使用 EJSON 保留 ObjectId、Date 等类型）
+      archive.append(EJSON.stringify(data, { relaxed: false }), {
+        name: `data/${collectionName}.json`
       });
       
       console.log(`[Backup] Exported collection: ${collectionName} (${data.length} documents)`);
@@ -225,43 +227,86 @@ router.post('/import', upload.single('backup'), async (req: AuthRequest, res: Re
       }
 
       const metadata = JSON.parse(fs.readFileSync(metadataPath, 'utf-8'));
-      
+
       // 导入数据
       const dataDir = path.join(extractDir, 'data');
       const files = fs.readdirSync(dataDir);
 
+      // 阶段1：预验证所有备份数据（在写入数据库之前）
+      console.log('[Backup] Validating backup data before import...');
+      const collectionsToImport: { name: string; data: any[] }[] = [];
       for (const file of files) {
         if (!file.endsWith('.json')) continue;
-        
         const collectionName = file.replace('.json', '');
         const filePath = path.join(dataDir, file);
-        const data = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+        const fileContent = fs.readFileSync(filePath, 'utf-8');
+        let data: any;
+        try {
+          data = EJSON.parse(fileContent);
+        } catch (e: any) {
+          throw new Error(`Invalid JSON in ${file}: ${e.message}`);
+        }
+        if (!Array.isArray(data)) {
+          throw new Error(`Invalid backup data in ${file}: expected array, got ${typeof data}`);
+        }
+        collectionsToImport.push({ name: collectionName, data });
+      }
+      console.log(`[Backup] Validated ${collectionsToImport.length} collections, starting import...`);
 
-        // 清空集合并导入数据
-        await db.collection(collectionName).deleteMany({});
-        if (data.length > 0) {
-          await db.collection(collectionName).insertMany(data);
+      // 阶段2：使用事务执行原子导入（如果数据库支持）
+      const client = getClient();
+      let session = null;
+      try {
+        if (client) {
+          session = client.startSession();
+          await session.startTransaction();
+          console.log('[Backup] Using transaction for atomic import');
+        }
+      } catch (e: any) {
+        console.log(`[Backup] Transactions not supported (standalone MongoDB), proceeding without atomicity: ${e.message}`);
+        session = null;
+      }
+
+      try {
+        for (const { name, data } of collectionsToImport) {
+          const options = session ? { session } : {};
+          // 清空集合并导入数据
+          await db.collection(name).deleteMany({}, options);
+          if (data.length > 0) {
+            await db.collection(name).insertMany(data, options);
+          }
+          console.log(`[Backup] Imported collection: ${name} (${data.length} documents)`);
         }
 
-        console.log(`[Backup] Imported collection: ${collectionName} (${data.length} documents)`);
+        if (session) {
+          await session.commitTransaction();
+          console.log('[Backup] Transaction committed successfully');
+        }
+      } catch (e) {
+        if (session) {
+          await session.abortTransaction();
+          console.log('[Backup] Transaction aborted — no data was modified');
+        }
+        throw e; // 由外层 catch 处理清理和错误响应
+      } finally {
+        if (session) {
+          await session.endSession();
+        }
       }
 
       // 清理临时文件
       fs.rmSync(extractDir, { recursive: true, force: true });
       fs.unlinkSync(tempPath);
 
-      // 通知客户端即将重启
+      // 从数据库重新加载所有缓存，无需重启
+      await reloadAllCaches();
+
       res.json({
         success: true,
-        message: 'Data imported successfully. Server will restart in 5 seconds...',
-        restartDelay: 5000
+        message: 'Data imported successfully. All caches have been reloaded.',
       });
 
-      // 延迟重启服务器
-      setTimeout(() => {
-        console.log('[Backup] Restarting server after data import...');
-        process.exit(0); // 退出进程，由进程管理器（如PM2）自动重启
-      }, 5000);
+      console.log('[Backup] Data import complete, caches reloaded in-place.');
 
     } catch (error: any) {
       // 清理临时文件

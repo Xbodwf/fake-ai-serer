@@ -30,6 +30,10 @@ export function getDB(): Db {
   return db;
 }
 
+export function getClient(): MongoClient | null {
+  return client;
+}
+
 export async function disconnectDB(): Promise<void> {
   if (client) {
     await client.close();
